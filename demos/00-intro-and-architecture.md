@@ -1,0 +1,99 @@
+# Demo 0 — Cold Open: What's an Agent, What's MCP (Objective 1, ~3 min)
+
+**Point being made:** an "AI agent" here is not a chatbot with a clever prompt.
+It's a model in a loop with tools, deciding for itself which ones to call, in
+what order, based on your question. MCP is the standard port that lets any tool
+server plug into any agent client. Nothing in this session is a plugin — it's
+all HTTP.
+
+No live demo yet — this is the two minutes of framing before Demo 1 starts the
+containers. Draw or paste the diagrams below; there is no deck.
+
+## The agent loop
+
+```
+        ┌─────────────────────────────────────────────────────────┐
+        │                                                         │
+        │   You: "Are there any blocking sessions right now?"     │
+        │                                                         │
+        └───────────────────────────┬─────────────────────────────┘
+                                     ▼
+                         ┌───────────────────────┐
+                         │   Language Model      │
+                         │   (decides WHAT to    │
+                         │    call, not HOW)      │
+                         └───────────┬───────────┘
+                                     │ tool call
+                                     ▼
+                         ┌───────────────────────┐
+                         │   MCP Client           │
+                         │   (Copilot Chat)       │◄──── mcp.json names
+                         └───────────┬───────────┘        the servers
+                                     │ HTTP
+                                     ▼
+                         ┌───────────────────────┐
+                         │   MCP Server           │
+                         │   (sql-mcp-server)     │
+                         │   runs the real T-SQL  │
+                         └───────────┬───────────┘
+                                     │ TDS
+                                     ▼
+                         ┌───────────────────────┐
+                         │   SQL Server           │
+                         │   (the DMVs)           │
+                         └───────────────────────┘
+
+     The model never touches the database. It calls the tool.
+     The tool server runs the query. You stay in control of what
+     queries exist to be called.
+```
+
+## Two MCP servers, two trust boundaries
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Docker Compose network                     │
+│                                                                       │
+│  ┌────────────────┐        CRUD         ┌───────────────────────┐   │
+│  │                │◄────────────────────│  products-db (DAB)    │   │
+│  │  sqlserver1    │                     │  :5001 — zero-code    │   │
+│  │  ProductsDB    │                     │  REST/GraphQL/MCP     │   │
+│  │  :1433         │                     │  scoped to 4 tables   │   │
+│  │                │                     └───────────────────────┘   │
+│  │                │      SELECT only     ┌───────────────────────┐  │
+│  │                │◄─────────────────────│  sql-dba (custom)     │  │
+│  │                │                      │  :3001 — 34 DMV tools │  │
+│  └────────────────┘                      │  safety.ts allowlist  │  │
+│         ▲                                └───────────────────────┘  │
+│         │ SELECT only                             ▲                 │
+│  ┌────────────────┐                                │                 │
+│  │  sqlserver2    │────────────────────────────────┘                 │
+│  │  (secondary)   │        multi-instance fan-out                    │
+│  └────────────────┘                                                  │
+└─────────────────────────────────────────────────────────────────────┘
+
+  products-db: scoped CRUD, application data, DAB enforces the rules.
+  sql-dba:     read-only DMVs, the whole estate, safety.ts enforces the rules.
+  Neither server knows the other exists. The agent is the only thing
+  that spans both — and it still can't do anything either server disallows.
+```
+
+## Tools vs. skills vs. guardrails (the shape of the whole session)
+
+```
+  TOOLS       →  give the agent eyes.       (Demo 2: blocking + DAB, no skill attached)
+  SKILLS      →  give the agent judgment.   (Demos 3-6: availability, backup, security, observability)
+  GUARDRAILS  →  keep a human in the loop.  (Demo 7: synthesis — what stopped the agent, every time)
+```
+
+## Talking points
+- "An agent is a model in a loop with tools. The loop is the whole trick —
+  it re-reads its own tool results and decides what to call next."
+- "MCP is boring on purpose. It's HTTP and JSON. That's why it works with
+  Copilot, Claude, or anything else that speaks the protocol."
+- "Watch for three things across the next hour: what tools existed (Demo 2),
+  what judgment a skill file adds on top of the same tools (Demos 3-6), and
+  what the agent refused to do without a human (every demo, synthesized in 7)."
+
+## Reset
+None — this is narration only, no environment state.

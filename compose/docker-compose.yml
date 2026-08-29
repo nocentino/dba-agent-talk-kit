@@ -1,0 +1,253 @@
+# Pin the project name so it stays stable regardless of the compose file's
+# folder (otherwise it defaults to "compose", the parent directory name).
+name: dba-agent-talk-kit
+
+services:
+  # SQL Server 2025 (latest with advanced features)
+  sqlserver1:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    platform: linux/amd64
+    container_name: sql-mcp-sqlserver1
+    hostname: sqlserver1
+    environment:
+      - ACCEPT_EULA=${ACCEPT_EULA:-Y}
+      - MSSQL_SA_PASSWORD=${SA_PASSWORD}
+      - MSSQL_PID=Developer
+      - MSSQL_ENABLE_HADR=1
+    ports:
+      - "1433:1433"
+    volumes:
+      - sql-data:/var/opt/mssql
+      - ag-certs:/var/opt/ag-certs
+      - ag-backups:/var/opt/mssql/backup
+      - ../scripts/init-sqlserver1.sql:/docker-entrypoint-initdb.d/init-sqlserver1.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"${SA_PASSWORD}\" -C -l 5 -t 5 -h -1 -Q \"SET NOCOUNT ON; SELECT 'PROBEOK'\" 2>/dev/null | grep -q '^PROBEOK$$'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - sql-mcp-network
+    restart: unless-stopped
+
+  # Initialize database with sample data and DBA monitoring infrastructure
+  sql-init:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    platform: linux/amd64
+    container_name: sql-mcp-init
+    depends_on:
+      sqlserver1:
+        condition: service_healthy
+    volumes:
+      - ../scripts:/scripts:ro
+    command: >
+      /bin/bash -c "
+        echo 'Waiting for SQL Server to be ready...' &&
+        sleep 10 &&
+        echo 'Initializing ProductsDB and dba_monitor account...' &&
+        /opt/mssql-tools18/bin/sqlcmd -S sqlserver1 -U sa -P '${SA_PASSWORD}' -C -i /scripts/init-sqlserver1.sql &&
+        echo 'All initialization complete!'
+      "
+    networks:
+      - sql-mcp-network
+
+  # Data API Builder MCP Server — ProductsDB application access only
+  dab-mcp:
+    image: mcr.microsoft.com/azure-databases/data-api-builder:2.0.1-rc
+    platform: linux/amd64
+    container_name: sql-mcp-dab
+    hostname: dab-mcp
+    environment:
+      - MSSQL_CONNECTION_STRING=Server=sqlserver1,1433;Database=${SQL_DATABASE:-ProductsDB};User ID=dab_app;Password=${DAB_PASSWORD};Encrypt=false;TrustServerCertificate=true;
+    ports:
+      - "5001:5000"
+    volumes:
+      - ../dab-config.json:/App/dab-config.json:ro
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sql-mcp-network
+    restart: unless-stopped
+
+  # Second SQL Server 2025 instance — used for multi-instance testing
+  sqlserver2:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    platform: linux/amd64
+    container_name: sql-mcp-sqlserver2
+    hostname: sqlserver2
+    environment:
+      - ACCEPT_EULA=${ACCEPT_EULA:-Y}
+      - MSSQL_SA_PASSWORD=${SA_PASSWORD}
+      - MSSQL_PID=Developer
+      - MSSQL_ENABLE_HADR=1
+    ports:
+      - "1434:1433"
+    volumes:
+      - ag-certs:/var/opt/ag-certs
+      - ag-backups:/var/opt/mssql/backup
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"${SA_PASSWORD}\" -C -l 5 -t 5 -h -1 -Q \"SET NOCOUNT ON; SELECT 'PROBEOK'\" 2>/dev/null | grep -q '^PROBEOK$$'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - sql-mcp-network
+    restart: unless-stopped
+
+  # Create dba_monitor on sqlserver2 (mirrors the account on sqlserver1)
+  sql-init-sqlserver2:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    platform: linux/amd64
+    container_name: sql-mcp-init-sqlserver2
+    depends_on:
+      sqlserver2:
+        condition: service_healthy
+    volumes:
+      - ../scripts:/scripts:ro
+    command: >
+      /bin/bash -c "
+        echo 'Creating dba_monitor on sqlserver2...' &&
+        /opt/mssql-tools18/bin/sqlcmd -S sqlserver2 -U sa -P '${SA_PASSWORD}' -C -i /scripts/init-sqlserver2.sql &&
+        echo 'sqlserver2 initialization complete!'
+      "
+    networks:
+      - sql-mcp-network
+
+  # SQL Server DBA MCP Server — full T-SQL access to DMVs for agent-driven monitoring
+  # Built directly from the sql-mcp-server GitHub repo — no local checkout needed.
+  # Pin a commit/tag after '#' if you want a reproducible build instead of tracking main.
+  sql-mcp-server:
+    build:
+      context: https://github.com/nocentino/sql-mcp-server.git#main:sql-mcp-server
+    container_name: sql-mcp-dba
+    env_file:
+      - ../.env
+    ports:
+      - "3001:3000"
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+      sql-init-sqlserver2:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - sql-mcp-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # Fleet overlay (bonus demos only) — start with:
+  #   docker compose --profile fleet up -d
+  # sqlserver3: "maintenance neglect" (fragmentation, failed SQL Agent job)
+  # sqlserver4: "deadlocks & tempdb"
+  # Neither joins AG_Products; register both in .env INSTANCES to query them.
+  # ---------------------------------------------------------------------
+  sqlserver3:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    platform: linux/amd64
+    container_name: sql-mcp-sqlserver3
+    hostname: sqlserver3
+    profiles: ["fleet"]
+    environment:
+      - ACCEPT_EULA=${ACCEPT_EULA:-Y}
+      - MSSQL_SA_PASSWORD=${SA_PASSWORD}
+      - MSSQL_PID=Developer
+      # Must be "true" (or "1"), NOT "Y" — unlike ACCEPT_EULA, this image's
+      # entrypoint only recognizes true/false/1/0 for MSSQL_AGENT_ENABLED.
+      - MSSQL_AGENT_ENABLED=true
+    ports:
+      - "1436:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"${SA_PASSWORD}\" -C -l 5 -t 5 -h -1 -Q \"SET NOCOUNT ON; SELECT 'PROBEOK'\" 2>/dev/null | grep -q '^PROBEOK$$'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - sql-mcp-network
+    restart: unless-stopped
+
+  sql-init-sqlserver3:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    platform: linux/amd64
+    container_name: sql-mcp-init-sqlserver3
+    profiles: ["fleet"]
+    depends_on:
+      sqlserver3:
+        condition: service_healthy
+    volumes:
+      - ../scripts:/scripts:ro
+    command: >
+      /bin/bash -c "
+        echo 'Creating dba_monitor on sqlserver3...' &&
+        /opt/mssql-tools18/bin/sqlcmd -S sqlserver3 -U sa -P '${SA_PASSWORD}' -C -i /scripts/init-sqlserver3.sql &&
+        echo 'sqlserver3 initialization complete!'
+      "
+    networks:
+      - sql-mcp-network
+
+  sqlserver4:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    platform: linux/amd64
+    container_name: sql-mcp-sqlserver4
+    hostname: sqlserver4
+    profiles: ["fleet"]
+    environment:
+      - ACCEPT_EULA=${ACCEPT_EULA:-Y}
+      - MSSQL_SA_PASSWORD=${SA_PASSWORD}
+      - MSSQL_PID=Developer
+    ports:
+      - "1437:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"${SA_PASSWORD}\" -C -l 5 -t 5 -h -1 -Q \"SET NOCOUNT ON; SELECT 'PROBEOK'\" 2>/dev/null | grep -q '^PROBEOK$$'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - sql-mcp-network
+    restart: unless-stopped
+
+  sql-init-sqlserver4:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    platform: linux/amd64
+    container_name: sql-mcp-init-sqlserver4
+    profiles: ["fleet"]
+    depends_on:
+      sqlserver4:
+        condition: service_healthy
+    volumes:
+      - ../scripts:/scripts:ro
+    command: >
+      /bin/bash -c "
+        echo 'Creating dba_monitor on sqlserver4...' &&
+        /opt/mssql-tools18/bin/sqlcmd -S sqlserver4 -U sa -P '${SA_PASSWORD}' -C -i /scripts/init-sqlserver4.sql &&
+        echo 'sqlserver4 initialization complete!'
+      "
+    networks:
+      - sql-mcp-network
+
+volumes:
+  sql-data:
+    driver: local
+  ag-certs:
+    driver: local
+  ag-backups:
+    driver: local
+
+networks:
+  sql-mcp-network:
+    driver: bridge
