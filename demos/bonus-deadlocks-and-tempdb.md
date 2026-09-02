@@ -1,6 +1,6 @@
 # Bonus · Deadlocks & TempDB
 
-**A deadlock graph is unreadable XML to most people. The agent reads the same `system_health` ring buffer and tells you — in one sentence — who won, who lost, and why.**
+**A deadlock graph is unreadable XML to most people. The agent reads the same `system_health` ring buffer and tells you, in one sentence, who won, who lost, and why.**
 
 *Optional (~5 min) · requires the fleet profile (SqlServer4).*
 
@@ -20,13 +20,13 @@
 
 ---
 
-## Setup — trigger a deadlock + tempdb pressure
+## Setup: trigger a deadlock + tempdb pressure
 
 ```bash
 ./demos/sql/seed-deadlocks-tempdb.sh
 ```
 
-Two sessions update `TableA`/`TableB` in opposite order — a textbook deadlock,
+Two sessions update `TableA`/`TableB` in opposite order, a textbook deadlock,
 landed in the ring buffer reliably. A background unindexed sort adds tempdb pressure.
 
 ---
@@ -40,7 +40,7 @@ landed in the ring buffer reliably. A background unindexed sort adds tempdb pres
 
 ## What you'll see
 
-1. [`get_deadlock_history`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) → victim + survivor, the `UPDATE` statements, the lock resources — **reliable every run**
+1. [`get_deadlock_history`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) → victim + survivor, the `UPDATE` statements, the lock resources: **reliable every run**
 2. [`get_tempdb_usage`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) → file space is always real; the top-session catch is timing-dependent (honest either way)
 3. Synthesis: the opposite-lock-order pattern; the fix is **application access order**, not an index
 
@@ -48,15 +48,15 @@ landed in the ring buffer reliably. A background unindexed sort adds tempdb pres
 
 ## Why it matters
 
-- Nobody reads deadlock XML by hand — same ring buffer every DBA has, just translated
-- The fix for a deadlock is almost never query tuning — watch whether the agent says *access order*
-- Whatever tempdb shows is real, live data — that's the point, not catching a spike on cue
+- Nobody reads deadlock XML by hand; same ring buffer every DBA has, just translated
+- The fix for a deadlock is almost never query tuning; watch whether the agent says *access order*
+- Whatever tempdb shows is real, live data; that's the point, not catching a spike on cue
 
 ---
 
 ## The Skill (optional, for consistency)
 
-**`.github/instructions/deadlock-and-tempdb.instructions.md`** — a reusable SOP that:
+**`.github/instructions/deadlock-and-tempdb.instructions.md`**: a reusable SOP that:
 - Defines when to call [`get_deadlock_history`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) vs [`get_tempdb_usage`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts)
 - Names the victim and survivor from the XML
 - Identifies opposite-lock-order as the root cause
@@ -64,7 +64,7 @@ landed in the ring buffer reliably. A background unindexed sort adds tempdb pres
 - Enforces hard boundaries: never recommend `SET DEADLOCK_PRIORITY` as a fix
 
 **Why it matters:** In production, the skill ensures your agent applies the same
-diagnostic sequence every time, every instance, every human—no variation. On stage,
+diagnostic sequence every time, every instance, every human, no variation. On stage,
 attach it for a deterministic 4-minute demo that always hits the same talking points.
 
 ---

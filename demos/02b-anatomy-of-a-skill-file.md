@@ -8,12 +8,12 @@
 
 Plain markdown. No code. Six parts, in order:
 
-1. **Persona** — one paragraph: who the agent is, who it serves
-2. **Trigger conditions** — when this skill applies, so the agent self-selects
-3. **Procedure** — the exact tool sequence, as numbered steps
-4. **Thresholds in tables** — numbers, not adjectives. "Healthy" is a *value*
-5. **Decision rules** — if/then, so the output is consistent run to run
-6. **Hard boundaries** — what the agent must never do, and when to hand off
+1. **Persona**: one paragraph: who the agent is, who it serves
+2. **Trigger conditions**: when this skill applies, so the agent self-selects
+3. **Procedure**: the exact tool sequence, as numbered steps
+4. **Thresholds in tables**: numbers, not adjectives. "Healthy" is a *value*
+5. **Decision rules**: if/then, so the output is consistent run to run
+6. **Hard boundaries**: what the agent must never do, and when to hand off
 
 ---
 
@@ -23,11 +23,11 @@ The difference between a chatbot and your SRE: *good* is a number **you** define
 
 | Metric | Healthy | Warning | Critical |
 |---|---|---|---|
-| send queue (sync) | < 1 MB | 1–10 MB | > 10 MB |
-| redo queue | < 10 MB | 10–100 MB | > 100 MB |
-| estimated data loss | < 15 s | 15–60 s | > 60 s |
+| send queue (sync) | < 1 MB | 1-10 MB | > 10 MB |
+| redo queue | < 10 MB | 10-100 MB | > 100 MB |
+| estimated data loss | < 15 s | 15-60 s | > 60 s |
 
-The agent doesn't guess what "behind" means — you told it, once, in the file.
+The agent doesn't guess what "behind" means; you told it, once, in the file.
 
 ---
 
@@ -55,14 +55,14 @@ description: "Availability management SOP for the SQL Server estate"
 ```
 
 - `applyTo` scopes it; `description` lets Copilot self-select the right skill
-- Or attach it by hand (Add Context → Instructions) — most deterministic on stage
+- Or attach it by hand (Add Context → Instructions); most deterministic on stage
 - Same file drops into Claude, Cursor, anything that takes context. **The skill outlives the client.**
 
 ---
 
 ## The next four demos
 
-Same tools you saw in Demo 2 — now with a skill on top. Watch the answer change
+Same tools you saw in Demo 2, now with a skill on top. Watch the answer change
 from *data* to *a verdict*:
 
 **Availability · Backup & Recovery · Security · Observability**

@@ -1,7 +1,7 @@
-# Build Your Own DBA Agent — 60-min Conference Session
+# Build Your Own DBA Agent: 60-min Conference Session
 
 Self-contained demo kit for a DBA agent built on
-[sql-mcp-server](https://github.com/nocentino/sql-mcp-server). No deck — this
+[sql-mcp-server](https://github.com/nocentino/sql-mcp-server). There's no deck; this
 is a demo-driven session. `docker compose up -d` from this repo's root brings
 up the whole environment; the MCP server image is built directly from the
 sql-mcp-server GitHub repo (no local checkout of that repo needed). See
@@ -68,7 +68,7 @@ the LLM and your infrastructure. Here's what that means for database operations:
 ### Why this matters for operations
 
 - **You stay in control**, not the LLM. The agent works *for* you, within boundaries you define.
-- **You can iterate safely**, because tool exposure, skill rules, and gates are configuration — change them without code changes.
+- **You can iterate safely**, because tool exposure, skill rules, and gates are configuration: change them without code changes.
 - **You can reason about risk**, because tool definitions and skills are human-readable policies, not buried in model weights.
 - **You can test**, because you can run the same scenario with/without a skill, with/without different tool subsets, to validate behavior before production deployment.
 
@@ -81,15 +81,15 @@ the LLM and your infrastructure. Here's what that means for database operations:
 | compose/docker-compose.yml | The whole environment: sqlserver1/2, dab-mcp, sql-mcp-server (built from GitHub), plus a `fleet` profile for 2 bonus-demo instances |
 | scripts/ | dba_monitor + ProductsDB init scripts for all 4 SQL Server instances |
 | dab-config.json | DAB entity config (Products/Categories/Orders/OrderDetails) |
-| demos/ | 8 core demo runbooks (00–07) + 4 bonus demos + seed/reset scripts (demos/sql/) |
+| demos/ | 8 core demo runbooks (00-07) + 4 bonus demos + seed/reset scripts (demos/sql/) |
 | .github/instructions/ | Copilot persona + 6 domain skill files (availability, backup-recovery, deadlock-tempdb, observability, security-audit, snapshot-freeze-safety) |
-| compose/ | The compose file + AG helper scripts (init-ag.sh, verify-ag.sh) — HADR itself is already on by default |
-| deck/DBA-Agent-with-MCP.pptx | Optional reference only — not used in the live session |
+| compose/ | The compose file + AG helper scripts (init-ag.sh, verify-ag.sh); HADR itself is already on by default |
+| deck/DBA-Agent-with-MCP.pptx | Optional reference only, not used in the live session |
 
 > The 4 security tools (`get_security_config_drift`, `get_sysadmin_members`,
 > `get_failed_logins`, `get_orphaned_users`) live in `sql-mcp-server/src/tools.ts`
 > in the sql-mcp-server repo, committed and pushed to `origin/main`
-> (commit `566b3a1`) — the git-context build here pulls them in automatically.
+> (commit `566b3a1`). The git-context build here pulls them in automatically.
 
 ## Quick start
 
@@ -99,7 +99,7 @@ One command to start the entire stack (all SQL servers, MCP servers, and AG init
 ./compose/startup.sh
 ```
 
-Run from the repo root. This starts all containers, waits for SQL Server to be ready, initializes Always On AG (AG_Products), and verifies health. Takes 2–3 minutes. When it says **✅ Stack Ready!**, proceed to wire `mcp.json` per [demos/01-install-and-configure.md](demos/01-install-and-configure.md) and start at [demos/README.md](demos/README.md).
+Run from the repo root. This starts all containers, waits for SQL Server to be ready, initializes Always On AG (AG_Products), and verifies health. Takes 2-3 minutes. When it says **✅ Stack Ready!**, proceed to wire `mcp.json` per [demos/01-install-and-configure.md](demos/01-install-and-configure.md) and start at [demos/README.md](demos/README.md).
 
 ### Manual setup (if you prefer step-by-step control)
 

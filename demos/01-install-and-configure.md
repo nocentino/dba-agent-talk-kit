@@ -1,6 +1,6 @@
 # Demo 1 · Install & Configure the MCP Server
 
-**An MCP server is just an HTTP endpoint. Until `mcp.json` names it, Copilot has zero access — no matter how good the model is.**
+**An MCP server is just an HTTP endpoint. Until `mcp.json` names it, Copilot has zero access. It doesn't matter how good the model is.**
 
 ---
 
@@ -14,7 +14,7 @@ Nothing → two containers → one JSON block → tools appear in Copilot Chat.
 
 ---
 
-## Setup — one command to start everything
+## Setup: one command to start everything
 
 ```bash
 ./compose/startup.sh
@@ -22,7 +22,7 @@ Nothing → two containers → one JSON block → tools appear in Copilot Chat.
 
 This starts all containers (core stack + fleet profile), waits for SQL Server to be ready, initializes the Always On AG, and verifies everything is healthy.
 
-**That's it.** No environment setup, no multiple commands — run from the repo root and it handles the whole stack.
+**That's it.** No environment setup, no multiple commands. Run from the repo root and it handles the whole stack.
 
 ### Manual setup (if you prefer step-by-step control)
 
@@ -46,13 +46,13 @@ curl http://localhost:3001/health   # sql-dba MCP server
 curl http://localhost:5001/health   # products-db (DAB)
 ```
 
-Four services, all healthy. A normal web server — not an AI-only thing.
+Four services, all healthy. A normal web server, not an AI-only thing.
 
 ---
 
 ## Wire up VS Code
 
-`mcp.json` — Command Palette → **MCP: Open User Configuration**:
+`mcp.json`: Command Palette → **MCP: Open User Configuration**:
 
 ```json
 {
@@ -76,7 +76,7 @@ Save. VS Code picks up the servers automatically.
 
 ## What you'll see
 
-1. The tool picker expands — `sql-dba` + `products-db` appear. **Access just came into existence.**
+1. The tool picker expands: `sql-dba` + `products-db` appear. **Access just came into existence.**
 2. [`list_instances`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) → `SqlServer1`, `SqlServer2`
 3. [`get_server_info`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) per instance → version, CPU/RAM, uptime
 4. Flags default config drift: MAXDOP 0, uncapped memory, low cost threshold
@@ -86,10 +86,10 @@ Save. VS Code picks up the servers automatically.
 
 ## Why it matters
 
-- **That JSON block is the entire integration** — no SDK, no plugin, no lock-in
+- **That JSON block is the entire integration.** No SDK, no plugin, no lock-in.
 - Until you save it, the tool doesn't exist for the agent to call
 - **Two servers, two trust boundaries:** `products-db` = scoped CRUD; `sql-dba` = read-only DMVs across the estate
-- The config concerns it flagged are container defaults — we fix nothing yet
+- The config concerns it flagged are container defaults; we fix nothing yet
 
 ---
 

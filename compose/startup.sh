@@ -23,26 +23,26 @@ fi
 source .env
 
 echo "=========================================="
-echo "DBA Agent Talk Kit — Full Stack Startup"
+echo "DBA Agent Talk Kit: Full Stack Startup"
 echo "=========================================="
 echo ""
 
 # Step 1: Start core stack
 # --wait is skipped: Compose treats the one-shot init containers exiting(0) as a
 # dependency failure and returns non-zero, so we poll for readiness in step 3 instead.
-echo "📦 Step 1/5 — Starting core stack (sqlserver1, sqlserver2, mcp servers)..."
+echo "📦 Step 1/5: Starting core stack (sqlserver1, sqlserver2, mcp servers)..."
 docker compose up -d
 echo "✓ Core stack up"
 echo ""
 
 # Step 2: Start fleet profile
-echo "📦 Step 2/5 — Starting fleet profile (sqlserver3, sqlserver4)..."
+echo "📦 Step 2/5: Starting fleet profile (sqlserver3, sqlserver4)..."
 docker compose --profile fleet up -d
 echo "✓ Fleet instances up"
 echo ""
 
 # Step 3: Wait for SQL Server to accept connections
-echo "📦 Step 3/5 — Waiting for SQL Server instances to be ready..."
+echo "📦 Step 3/5: Waiting for SQL Server instances to be ready..."
 max_retries=30
 retry=0
 while [ $retry -lt $max_retries ]; do
@@ -79,7 +79,7 @@ echo "✓ ProductsDB ready"
 echo ""
 
 # Step 4: Initialize AG
-echo "📦 Step 4/5 — Initializing Always On AG (AG_Products)..."
+echo "📦 Step 4/5: Initializing Always On AG (AG_Products)..."
 if ./compose/init-ag.sh; then
   echo "✓ AG initialized"
 else
@@ -104,7 +104,7 @@ done
 echo ""
 
 # Step 5: Verify stack
-echo "📦 Step 5/5 — Verifying stack..."
+echo "📦 Step 5/5: Verifying stack..."
 if ./compose/verify-ag.sh; then
   echo "✓ AG verification passed"
 else

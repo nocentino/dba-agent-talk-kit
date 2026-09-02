@@ -9,7 +9,7 @@ export COMPOSE_FILE="${COMPOSE_FILE:-compose/docker-compose.yml}"
 export COMPOSE_ENV_FILES="${COMPOSE_ENV_FILES:-.env}"
 
 echo "=========================================="
-echo "DBA Agent Talk Kit — Full Stack Teardown"
+echo "DBA Agent Talk Kit: Full Stack Teardown"
 echo "=========================================="
 echo ""
 

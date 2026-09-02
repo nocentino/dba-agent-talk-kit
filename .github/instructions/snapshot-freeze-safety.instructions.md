@@ -9,7 +9,7 @@ description: "Application-consistent snapshot SOP: freeze management, crash-cons
 The user asks to "take a snapshot," "back up this database consistently," "freeze for snapshot,"
 or "replicate to DR with safety." The estate policy mandates application-consistent snapshots
 for Tier-1 databases using storage-level snapshots (Pure Fusion) with automatic freeze release
-on failure — no database suspension without a guarded orchestration path.
+on failure. No database suspension happens without a guarded orchestration path.
 
 ## Persona
 You are orchestrating an application-consistent snapshot: a coordinated sequence across SQL Server
@@ -18,10 +18,10 @@ automatic rollback (release the freeze) if any step fails. Your job is to enforc
 freeze cap, verify all volumes belong to one protection group, and gate every mutation with a
 permission prompt before executing it. You read-only check first; only mutations ask for approval.
 
-## Procedure — snapshotui REST API Orchestration
+## Procedure: snapshotui REST API Orchestration
 
 The snapshotui REST API at `http://aen-docker-01:8080/api/sqlserver/instances/{instance_id}/databases/{database_name}/snapshot-backup`
-handles the entire freeze-safety workflow automatically. You do not call freeze/snapshot/release separately — snapshotui orchestrates all steps.
+handles the entire freeze-safety workflow automatically. You do not call freeze/snapshot/release separately; snapshotui orchestrates all steps.
 
 **Simplified agent workflow:**
 
@@ -31,7 +31,7 @@ handles the entire freeze-safety workflow automatically. You do not call freeze/
    - Query snapshotui `/api/mapping/instance/{instance_id}` to verify all database volumes belong to **one PG**
    - Query [`get_long_running_transactions`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) to check for open transactions > 1 minute; **warn if found**
      (these increase freeze duration; recommend waiting or coordinating with app team)
-   - If any pre-flight check fails, **abort immediately** — do not proceed to REST API call
+   - If any pre-flight check fails, **abort immediately**: do not proceed to REST API call
 
 2. **Snapshot request (mutation gate fires here):**
    - **Permission gate:** Inform user that this will freeze the database, then request approval
@@ -61,19 +61,19 @@ handles the entire freeze-safety workflow automatically. You do not call freeze/
    - Database state (ONLINE)
    - **Actual freeze duration is measured server-side by snapshotui** (typical: <5s with CHECKPOINT optimization)
 
-## Thresholds — what "good" looks like here
+## Thresholds: what "good" looks like here
 | Metric | Healthy | Warning | Critical |
 |---|---|---|---|
-| Freeze duration (DB suspension) | < 10 s | 10–30 s | > 30 s (violates SLA) |
-| PG membership | All volumes in one PG | — | Volumes span multiple PGs (reject) |
-| Crash-consistency verified | Yes, all files in PG snapshot | — | Cannot verify (reject) |
-| Snapshot time to READY | 2–5 min | 5–10 min | > 10 min (investigate storage) |
-| DR replication time | < 5 min | 5–15 min | > 15 min (investigate link) |
-| Permission gate fired | Every mutation | — | Any mutation pre-approved (policy breach) |
-| snapshotui API response time | 30–60 sec | 60–120 sec | > 120 sec (timeouts) |
+| Freeze duration (DB suspension) | < 10 s | 10-30 s | > 30 s (violates SLA) |
+| PG membership | All volumes in one PG | N/A | Volumes span multiple PGs (reject) |
+| Crash-consistency verified | Yes, all files in PG snapshot | N/A | Cannot verify (reject) |
+| Snapshot time to READY | 2-5 min | 5-10 min | > 10 min (investigate storage) |
+| DR replication time | < 5 min | 5-15 min | > 15 min (investigate link) |
+| Permission gate fired | Every mutation | N/A | Any mutation pre-approved (policy breach) |
+| snapshotui API response time | 30-60 sec | 60-120 sec | > 120 sec (timeouts) |
 
 **Measured from TPCC-4T.19987 (2026-09-02):**
-- Freeze duration: <2 seconds (HEALTHY) — checkpoint optimization effective
+- Freeze duration: <2 seconds (HEALTHY), checkpoint optimization effective
 - Snapshot creation: ~5 seconds internally
 - Total API response time: ~10 seconds (pre-flight checks + all steps)
 - DR replication: Started immediately on replicate_now=true
@@ -86,7 +86,7 @@ handles the entire freeze-safety workflow automatically. You do not call freeze/
   and explain the crash-consistency risk: a snapshot of Volume A and a separate snapshot of Volume B
   are not guaranteed consistent with each other. Do not work around this.
 - **Pre-flight failure = abort.** If the database is not ONLINE, free space < 10% of total, or
-  volumes cannot be resolved, stop and report — do not proceed to API call.
+  volumes cannot be resolved, stop and report; do not proceed to API call.
 - **Long-running transactions = warning.** If any transactions are found open > 1 minute, report as WARNING and suggest 
   waiting or coordinating with app team. Long-running transactions increase freeze duration (more in-flight changes, slower checkpoint).
   This is not a blocker, but flagging it improves SLA observability.
@@ -95,9 +95,9 @@ handles the entire freeze-safety workflow automatically. You do not call freeze/
   indicates latency on the destination array or slow metadata-only backup).
 - **snapshotui API failure = auto-release verified.** If the snapshot call fails after freeze is held,
   snapshotui's internal TRY/CATCH ensures the freeze is released before the error response is returned.
-  The error is reported, but the database is always cleared — no stuck suspensions.
+  The error is reported, but the database is always cleared; no stuck suspensions.
 - **DR confirmation mandatory.** Never report success without verifying the replica volumes exist in the snapshot-catalog
-  on DR arrays. A snapshot that failed to replicate is a disaster — always verify.
+  on DR arrays. A snapshot that failed to replicate is a disaster; always verify.
 
 ## Recommended-action templates (draft only; human executes if manual intervention needed)
 
@@ -158,11 +158,11 @@ FROM sys.databases WHERE database_id = DB_ID();
 - Never extend the freeze beyond 30 seconds without explicit approval from the database owner
   and storage team. The 30s cap is a production SLA, not a guideline.
 - Never report success without confirming the DR replica volumes exist in the snapshot-catalog
-  on the DR arrays. A snapshot that failed to replicate is a disaster — always verify the
+  on the DR arrays. A snapshot that failed to replicate is a disaster; always verify the
   replication targets in `/api/flasharray/snapshot-catalog` response.
 
 ## Report format
-Title: `Application-Consistent Snapshot — <database> on <array> — <date>`. Structure:
+Title: `Application-Consistent Snapshot / <database> on <array> / <date>`. Structure:
 
 ```
 ## Snapshot Metadata
@@ -289,7 +289,7 @@ duration achieved, and confirm the replicated copy landed on the DR array."
    # Query volume mapping to verify all files in single PG
    curl -s http://aen-docker-01:8080/api/mapping/instance/aen-sql-25-a:1433
    
-   # Response excerpt: All 5 data files (tpcc_data_01–05, 4 TB each)
+   # Response excerpt: All 5 data files (tpcc_data_01-05, 4 TB each)
    # in volume sn1-x90r2-f07-27-vc01-ds01
    # in PG 1daySnapshot-1weekReplicationC
    ```

@@ -1,13 +1,13 @@
 # AG Setup + Fleet Profile
 
-`compose/docker-compose.yml` is one consolidated file — HADR is already enabled
+`compose/docker-compose.yml` is one consolidated file. HADR is already enabled
 on `sqlserver1`/`sqlserver2` by default, and the fleet instances
 (`sqlserver3`/`sqlserver4`) are behind a Compose profile so they don't start
 unless you ask for them.
 
 ---
 
-## Quick Start — One Command to Start Everything
+## Quick Start: One Command to Start Everything
 
 ```bash
 ./compose/startup.sh
@@ -20,7 +20,7 @@ This single command:
 4. Initializes the Always On AG (AG_Products)
 5. Verifies the AG is healthy
 
-No environment setup or multiple commands needed — run from the repo root and walk away.
+No environment setup or multiple commands needed: run from the repo root and walk away.
 
 ---
 
@@ -43,7 +43,7 @@ docker compose up -d
 ```
 
 ### Always On AG (`AG_Products`)
-HADR is already on from the core `up -d` above — no separate overlay needed.
+HADR is already on from the core `up -d` above; no separate overlay needed.
 ```bash
 ./compose/init-ag.sh      # certs, endpoints, AG create/join, seed
 ./compose/verify-ag.sh    # expect SYNCHRONIZED / HEALTHY
@@ -52,7 +52,7 @@ HADR is already on from the core `up -d` above — no separate overlay needed.
 ### What init-ag.sh does
 1. Creates a database master key + certificate on each instance.
 2. Exchanges certificate public keys (via `docker compose cp`) so the mirroring
-   endpoints authenticate mutually - no AD needed.
+   endpoints authenticate mutually, no AD needed.
 3. Creates the HADR endpoint (port 5022) on both instances.
 4. On primary: full + log backup of ProductsDB, CREATE AVAILABILITY GROUP
    AG_Products WITH (CLUSTER_TYPE = NONE), replicas sqlserver1/sqlserver2,
@@ -72,16 +72,16 @@ HADR is already on from the core `up -d` above — no separate overlay needed.
 ## Fleet profile (bonus demos)
 
 Adds two more standalone SQL Server instances so fleet-wide demos have four
-genuinely different members instead of two: `sqlserver3` (a neglected instance
-— stale stats, fragmentation, a failing SQL Agent job) and `sqlserver4` (a
-busy instance — deadlocks, tempdb pressure). Neither joins `AG_Products`.
+genuinely different members instead of two: `sqlserver3` (a neglected instance:
+stale stats, fragmentation, a failing SQL Agent job) and `sqlserver4` (a
+busy instance: deadlocks, tempdb pressure). Neither joins `AG_Products`.
 
 ### Bring-up
 ```bash
 docker compose --profile fleet up -d
 ```
 `sql-init-sqlserver3` / `sql-init-sqlserver4` create the `dba_monitor` login on
-each automatically — no separate init script to run manually.
+each automatically; no separate init script to run manually.
 
 ### Register both in `.env` `INSTANCES`
 Add to the JSON array (see `.env` for the existing `SqlServer1`/`SqlServer2` entries):
@@ -107,7 +107,7 @@ docker compose up -d --force-recreate sql-mcp-server
 ```
 
 ### Demo notes
-- `sqlserver3`: `MSSQL_AGENT_ENABLED=true` — reserved for future demos requiring SQL Agent.
+- `sqlserver3`: `MSSQL_AGENT_ENABLED=true`, reserved for future demos requiring SQL Agent.
 - `sqlserver4`: standalone, used for `demos/bonus-deadlocks-and-tempdb.md`.
   Seed with `demos/sql/seed-deadlocks-tempdb.sh`.
 - Both instances also make `demos/bonus-fleet-wide-waits.md` a genuine
@@ -115,7 +115,7 @@ docker compose up -d --force-recreate sql-mcp-server
 - Host ports: `sqlserver3` → 1436, `sqlserver4` → 1437 (1433/1434 already used
   by `sqlserver1`/`sqlserver2`, 1435 left open for a future member).
 
-## Full Teardown — One Command to Remove Everything
+## Full Teardown: One Command to Remove Everything
 
 ```bash
 ./compose/teardown.sh
@@ -124,7 +124,7 @@ docker compose up -d --force-recreate sql-mcp-server
 This single command:
 1. Stops all running containers (core + fleet profiles)
 2. Removes all volumes (data, logs, networks)
-3. Cleans up everything — safe to re-run `./compose/startup.sh` afterward
+3. Cleans up everything, safe to re-run `./compose/startup.sh` afterward
 
 Run from the repo root. No manual cleanup needed.
 

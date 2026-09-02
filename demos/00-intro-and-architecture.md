@@ -1,13 +1,13 @@
 # Demo 0 · What's an Agent? What's MCP?
 
-**Cold open — the one big idea before we touch a container.**
+**Cold open: the one big idea before we touch a container.**
 
 ---
 
 ## An agent isn't a chatbot with a clever prompt
 
 - A **model in a loop with tools**
-- It decides **which** tool to call, and in what order — from your question alone
+- It decides **which** tool to call, and in what order, from your question alone
 - **MCP** is the standard port: any tool server plugs into any agent client
 - Nothing here is a plugin. It's all **HTTP**
 
@@ -62,13 +62,13 @@
 │                                                                     │
 │  ┌────────────────┐        CRUD         ┌───────────────────────┐   │
 │  │                │◄────────────────────│  products-db (DAB)    │   │
-│  │  sqlserver1    │                     │  :5001 — zero-code    │   │
+│  │  sqlserver1    │                     │  :5001: zero-code    │   │
 │  │  ProductsDB    │                     │  REST/GraphQL/MCP     │   │
 │  │  :1433         │                     │  scoped to 4 tables   │   │
 │  │                │                     └───────────────────────┘   │
 │  │                │    SELECT only      ┌───────────────────────┐   │
 │  │                │◄────────────────────│  sql-dba (custom)     │   │
-│  │                │                     │  :3001 — 34 DMV tools │   │
+│  │                │                     │  :3001: 34 DMV tools │   │
 │  └────────────────┘                     │  safety.ts allowlist  │   │
 │          ▲                              └───────────────────────┘   │
 │          │ SELECT only                              ▲               │
@@ -81,7 +81,7 @@
   products-db: scoped CRUD, application data, DAB enforces the rules.
   sql-dba:     read-only DMVs, the whole estate, safety.ts enforces the rules.
   Neither server knows the other exists. The agent is the only thing
-  that spans both — and it still can't do anything either server disallows.
+  that spans both, and it still can't do anything either server disallows.
 ```
 
 ---
@@ -91,16 +91,16 @@
 ```
   TOOLS       →  give the agent eyes.       (Demo 2: blocking + DAB, no skill attached)
   SKILLS      →  give the agent judgment.   (Demos 3-6: availability, backup, security, observability)
-  GUARDRAILS  →  keep a human in the loop.  (Demo 7: synthesis — what stopped the agent, every time)
+  GUARDRAILS  →  keep a human in the loop.  (Demo 7: synthesis, what stopped the agent, every time)
 ```
 
 ---
 
 ## Watch for three things this hour
 
-1. What **tools** exist — Demo 2
-2. What **judgment** a skill file adds on top of the same tools — Demos 3–6
-3. What the agent **refused** to do without a human — every demo, synthesized in Demo 7
+1. What **tools** exist (Demo 2)
+2. What **judgment** a skill file adds on top of the same tools (Demos 3-6)
+3. What the agent **refused** to do without a human (every demo, synthesized in Demo 7)
 
 ---
 
