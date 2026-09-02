@@ -64,13 +64,13 @@ I want to be clear about this up front, because it changes how you think about e
 │                                                                     │
 │  ┌────────────────┐        CRUD         ┌───────────────────────┐   │
 │  │                │◄────────────────────│  products-db (DAB)    │   │
-│  │  sqlserver1    │                     │  :5001: zero-code    │   │
+│  │  sqlserver1    │                     │  :5001: zero-code     │   │
 │  │  ProductsDB    │                     │  REST/GraphQL/MCP     │   │
 │  │  :1433         │                     │  scoped to 4 tables   │   │
 │  │                │                     └───────────────────────┘   │
 │  │                │    SELECT only      ┌───────────────────────┐   │
 │  │                │◄────────────────────│  sql-dba (custom)     │   │
-│  │                │                     │  :3001: 34 DMV tools │   │
+│  │                │                     │  :3001: 34 DMV tools  │   │
 │  └────────────────┘                     │  safety.ts allowlist  │   │
 │          ▲                              └───────────────────────┘   │
 │          │ SELECT only                              ▲               │
