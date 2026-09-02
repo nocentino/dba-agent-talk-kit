@@ -1,74 +1,73 @@
-# Demo 2 — Tools Without Skills: Blocking Investigation + DAB (Objective 1, ~6 min)
+# Demo 2 · Tools Without Skills — Blocking + DAB
 
-**Point being made:** the agent doesn't write a query for you to run — it goes and
-gets the answer, chains tools, and hands you a diagnosis. And it *recommends* the
-KILL; it cannot execute it. (Plant guardrail #1 here; pay it off in Demo 7 — Trust
-& Guardrails.)
+**The agent doesn't hand you a query to run. It chains tools, gets the answer, and gives you a diagnosis — then *recommends* the KILL it cannot execute.**
 
-## Pre-demo state
-- Containers up (`./start.sh`), both MCP servers registered in VS Code `mcp.json`.
-- Copilot Chat open in **Agent mode**, `sql-dba` tools enabled.
-- Two terminals ready (or use the seed script below which backgrounds everything).
+---
 
-## Setup — seed the blocker (run ~60s before the demo)
-`demos/sql/seed-blocking.sh`:
+## The point
+
+- No skill attached yet — just tools and a good question
+- The agent picks the DMV itself, chains calls, and synthesizes
+- It **recommends** `KILL`; it **cannot run it** (guardrail #1 — paid off in Demo 7)
+
+---
+
+## Setup — seed the blocker
+
+Run this from the repo root **1–2 minutes before** starting the demo:
 
 ```bash
-#!/usr/bin/env bash
-# Terminal A - the head blocker: open txn + WAITFOR
-docker compose exec -d sqlserver /opt/mssql-tools18/bin/sqlcmd \
-  -S localhost -U sa -P "$SA_PASSWORD" -C -d ProductsDB -Q "
-BEGIN TRANSACTION;
-UPDATE dbo.Products SET UnitPrice = UnitPrice * 1.01 WHERE Category = 'Electronics';
-WAITFOR DELAY '00:08:00';
-ROLLBACK;"
-
-sleep 2
-
-# Terminal B - the victim: a SELECT that will queue behind the X lock
-docker compose exec -d sqlserver /opt/mssql-tools18/bin/sqlcmd \
-  -S localhost -U sa -P "$SA_PASSWORD" -C -d ProductsDB -Q "
-SELECT ProductID, ProductName, UnitPrice
-FROM dbo.Products WHERE Category = 'Electronics';"
-
-# Optional third victim via DAB REST (shows a blocked API call too):
-curl -s "http://localhost:5001/api/Products?\$filter=Category eq 'Electronics'" \
-  --max-time 300 > /dev/null &
+./demos/sql/seed-blocking.sh
 ```
 
-## The prompt (paste into Copilot Chat)
+What it does:
+- Starts a head blocker: open transaction + `WAITFOR DELAY '00:08:00'` holds an exclusive lock on all `Electronics` rows
+- Starts a victim `SELECT` that queues behind the blocker (waits on shared lock)
+- Optionally starts a third victim via DAB REST scan
+- The blocker will auto-rollback after 8 minutes
+
+**Note:** The script uses file-based SQL execution (not inline `-Q` queries) to keep sqlcmd sessions persistent during WAITFOR.
+
+---
+
+## The prompt
+
 > Are there any blocking sessions right now on SqlServer1? Who is blocking whom,
 > how long has the block been in place, and what SQL is running on both sides?
 > What should I do about it?
 
-## Expected agent behavior (narrate as it happens)
-1. Calls `get_blocking_chains(instance_name: "SqlServer1")`.
-2. Identifies the head blocker (open transaction + `WAITFOR`), the LCK_M_S waiters,
-   wait time, and both SQL texts.
-3. Recommends `KILL <spid>` **as a script** — it cannot run it.
+---
 
-## Talking points while it runs
-- "Notice it picked the tool from the description. I never told it which DMV."
-- "The blocker SQL text comes from `most_recent_sql_handle` — credit to the
-  First Responder Kit for that pattern."
-- When the KILL recommendation appears: "This is the trust story in one screenshot.
-  The agent has SELECT-only access — enforced in code, not in a prompt. It can
-  diagnose; I decide. Hold that thought for Act 4."
+## What you'll see
 
-## Reset
+1. Calls [`get_blocking_chains`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts)(instance_name: "SqlServer1") — from the tool description alone
+2. Names the head blocker (open txn + `WAITFOR`), the `LCK_M_S` waiters, wait time, both SQL texts
+3. Recommends `KILL <spid>` **as a script** — it cannot run it
+
+The chain can come back **two levels deep** — the DAB REST scan queues behind the
+blocker and then blocks the plain `SELECT` itself. Cross-MCP contention, live.
+
+---
+
+## Cleanup
+
+When you're done with the demo, clear the blocking scenario:
+
 ```bash
-# Find and kill the WAITFOR session if it's still open
-docker compose exec sqlserver /opt/mssql-tools18/bin/sqlcmd \
-  -S localhost -U sa -P "$SA_PASSWORD" -C -Q "
-DECLARE @spid INT = (SELECT TOP 1 session_id FROM sys.dm_exec_requests
-                     WHERE command = 'WAITFOR' AND session_id <> @@SPID);
-IF @spid IS NOT NULL EXEC('KILL ' + @spid);"
+./demos/sql/clear-blocking.sh
 ```
 
-## Failure modes / fallback
-- Blocker expired (8-min WAITFOR) → re-run seed script; it takes 3 seconds.
-- Agent answers from a stale earlier tool result → new chat session per demo,
-  always. Start each demo in a fresh chat.
-- Copilot picks `get_active_sessions` first → fine; it will chain to
-  `get_blocking_chains`. Don't rescue it too early — the chaining IS the demo.
-- Total failure → recording `demo1-blocking.mp4` (see recordings.md).
+This kills the blocker session and returns the database to a clean state.
+
+---
+
+## Why it matters
+
+- It picked the tool from the description — you never named a DMV
+- Blocker SQL text comes from `most_recent_sql_handle` (First Responder Kit pattern)
+- **The trust story in one screenshot:** `sql-dba` is SELECT-only, enforced in code, not a prompt
+- It diagnoses; **you decide**
+
+---
+
+**Next:** [Interlude · Anatomy of a Skill File →](02b-anatomy-of-a-skill-file.md)

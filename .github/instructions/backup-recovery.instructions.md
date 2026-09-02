@@ -26,12 +26,12 @@ Tier assignment: databases are tagged in the estate inventory; if untagged, ask 
 user or assume Tier-1 for anything with "Prod" semantics and say you assumed it.
 
 ## Procedure
-1. `list_instances`, then `get_backup_status` on each in-scope instance. Collect per
+1. [`list_instances`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts), then [`get_backup_status`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) on each in-scope instance. Collect per
    database: recovery model, last full, last diff, last log.
-2. `get_database_info` — cross-check recovery model and `log_reuse_wait_desc`.
+2. [`get_database_info`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — cross-check recovery model and `log_reuse_wait_desc`.
    `LOG_BACKUP` as the reuse wait on a FULL-recovery database with no recent log
    backup is the smoking gun for both RPO exposure AND impending log growth.
-3. `get_database_files` — if log reuse is blocked, report current log size and growth
+3. [`get_database_files`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — if log reuse is blocked, report current log size and growth
    settings so the human sees the secondary blast radius (disk fill).
 4. For every database, compute **current exposure** = time since last log backup
    (FULL recovery) or time since last full (SIMPLE). Compare to the tier's RPO.
@@ -48,7 +48,7 @@ user or assume Tier-1 for anything with "Prod" semantics and say you assumed it.
   policy violation even if backups are "current" — point-in-time recovery is
   impossible in SIMPLE.
 - **Log backup late but < 2× RPO** → WARNING; likely a stalled job — check
-  `get_job_status` for the log backup job before assuming worse.
+  [`get_job_status`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) for the log backup job before assuming worse.
 - Always express exposure in **minutes of data loss right now**, per database,
   ranked worst-first. Humans act on that number.
 

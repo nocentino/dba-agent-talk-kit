@@ -2,14 +2,14 @@
 # Bonus demo seed: a real deadlock (captured in system_health XE) + tempdb
 # pressure. Targets sqlserver4 (the "deadlocks & tempdb" fleet member).
 set -euo pipefail
-source ../../.env 2>/dev/null || true
-# Compose file lives in compose/; point docker compose at it + the root .env.
 _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$_ROOT/.env" 2>/dev/null || true
 export COMPOSE_FILE="$_ROOT/compose/docker-compose.yml"
 export COMPOSE_ENV_FILES="$_ROOT/.env"
 SA_PASSWORD="${SA_PASSWORD:?Set SA_PASSWORD or source .env}"
 
-echo "1/2 Setting up two tables for a classic opposite-order-update deadlock..."
+echo "Seeding deadlock + tempdb scenario..."
+echo "[1/2] Setting up two tables for a classic opposite-order-update deadlock..."
 docker compose exec sqlserver4 /opt/mssql-tools18/bin/sqlcmd \
   -S localhost -U sa -P "$SA_PASSWORD" -C -Q "
 IF DB_ID('DeadlockDemoDB') IS NULL CREATE DATABASE [DeadlockDemoDB];"
@@ -23,7 +23,7 @@ BEGIN
   INSERT INTO dbo.TableB VALUES (1, 200);
 END;"
 
-echo "2/2 Firing two sessions in opposite lock order (one will be the deadlock victim)..."
+echo "[2/2] Firing two sessions in opposite lock order (one will be the deadlock victim)..."
 docker compose exec -d sqlserver4 /opt/mssql-tools18/bin/sqlcmd \
   -S localhost -U sa -P "$SA_PASSWORD" -C -d DeadlockDemoDB -Q "
 BEGIN TRANSACTION;
@@ -40,7 +40,12 @@ WAITFOR DELAY '00:00:03';
 UPDATE dbo.TableA SET Val = Val + 1 WHERE ID = 1;
 COMMIT;" || true
 
-echo "Generating tempdb pressure (large unindexed sort, held open for 30s)..."
+echo ""
+echo "✓ Deadlock + tempdb load seeded."
+echo "  - Deadlock trigger: Two sessions updating TableA/TableB in opposite order"
+echo "  - Tempdb pressure: Large sorted temp table created (#bigsort, 30s hold)"
+echo "  - Check system_health XE for deadlock graph"
+echo "  Run query: get_deadlock_history() on SqlServer4"
 docker compose exec -d sqlserver4 /opt/mssql-tools18/bin/sqlcmd \
   -S localhost -U sa -P "$SA_PASSWORD" -C -Q "
 SET NOCOUNT ON;

@@ -3,13 +3,13 @@
 # get_missing_indexes have real plan-cache data to report on. Fast (~10s),
 # unlike seed-fleet-load.sh which is built to run for minutes.
 set -euo pipefail
-source ../../.env 2>/dev/null || true
-# Compose file lives in compose/; point docker compose at it + the root .env.
 _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$_ROOT/.env" 2>/dev/null || true
 export COMPOSE_FILE="$_ROOT/compose/docker-compose.yml"
 export COMPOSE_ENV_FILES="$_ROOT/.env"
 SA_PASSWORD="${SA_PASSWORD:?Set SA_PASSWORD or source .env}"
 
+echo "Loading ~20k filler rows with skewed category distribution..."
 docker compose exec sqlserver1 /opt/mssql-tools18/bin/sqlcmd \
   -S localhost -U sa -P "$SA_PASSWORD" -C -d ProductsDB -Q "
 SET NOCOUNT ON;
@@ -43,6 +43,12 @@ BEGIN
     JOIN dbo.Orders o ON o.OrderID = od.OrderID
   WHERE p.UnitsInStock < 50 AND p.UnitPrice > 20;
   SET @i += 1;
-END;"
+END;" > /dev/null 2>&1
 
-echo "Observability load seeded: ~20k filler rows (Electronics ~3%) + Category scan activity."
+echo "✓ Data load complete."
+echo ""
+echo "✓ Observability load seeded."
+echo "  - ~20k filler rows added (Electronics ~3% of population)"
+echo "  - Category scan activity completed (no index = full table scan)"
+echo "  - Plan cache populated with missing-index candidates"
+echo "  Run query: get_missing_indexes() or get_top_queries() on SqlServer1"

@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Demo 5 seed: config drift + rogue sysadmin + orphaned user + failed-login spray.
 set -euo pipefail
-source ../../.env 2>/dev/null || true
-# Compose file lives in compose/; point docker compose at it + the root .env.
 _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$_ROOT/.env" 2>/dev/null || true
 export COMPOSE_FILE="$_ROOT/compose/docker-compose.yml"
 export COMPOSE_ENV_FILES="$_ROOT/.env"
 SA_PASSWORD="${SA_PASSWORD:?Set SA_PASSWORD or source .env}"
@@ -45,4 +44,10 @@ for i in 1 2 3; do
     -S localhost -U admin_probe -P "TryMe${i}!" -C -Q "SELECT 1" >/dev/null 2>&1 || true
 done
 
-echo "Security findings seeded: config drift, rogue sysadmin, orphaned user, failed logins."
+echo ""
+echo "✓ Security findings seeded."
+echo "  - SEC-001: Config drift (CLR enabled + Ad Hoc Distributed Queries)"
+echo "  - SEC-002: Privileged access (svc_reporting added to sysadmin)"
+echo "  - SEC-003: Orphaned user (temp_migration_login without server login)"
+echo "  - SEC-004: Failed login spray (10+ failed attempts from known pattern)"
+echo "  Run query: security_audit() or similar on SqlServer1"

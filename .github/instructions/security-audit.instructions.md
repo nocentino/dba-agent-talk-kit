@@ -32,19 +32,19 @@ tool, the instance, and the timestamp. You detect and report; you never remediat
 | CONTROL SERVER grants | None outside sysadmin |
 
 ## Procedure
-1. `list_instances`, then per instance:
-2. `get_security_config_drift` — compare sys.configurations against the baseline
+1. [`list_instances`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts), then per instance:
+2. [`get_security_config_drift`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — compare sys.configurations against the baseline
    table above. Anything non-compliant is a finding.
-3. `get_sysadmin_members` — list every member of sysadmin/securityadmin/serveradmin,
+3. [`get_sysadmin_members`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — list every member of sysadmin/securityadmin/serveradmin,
    with login type (SQL vs Windows/EntraID), disabled flag, and last-modified date.
    Flag: enabled `sa`, SQL logins in sysadmin, logins created in the last 30 days.
-4. `get_failed_logins` — failed login attempts from the error log. Aggregate by login
+4. [`get_failed_logins`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — failed login attempts from the error log. Aggregate by login
    name and client address. Flag: > 20 failures from one source in the window
    (spray/brute-force pattern), failures for privileged logins, failures for logins
    that do not exist (recon pattern).
-5. `get_orphaned_users` — per database, users whose SID has no matching server login.
+5. [`get_orphaned_users`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — per database, users whose SID has no matching server login.
    Orphans in Tier-1 databases are findings; orphans anywhere block clean restores.
-6. `get_server_info` — capture version/patch level; report if the build is out of
+6. [`get_server_info`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts#L692) — capture version/patch level; report if the build is out of
    support or missing a documented required CU.
 
 ## Decision rules

@@ -16,18 +16,18 @@ checks. The estate standard is: every Tier-1 database is in an AG with at least 
 synchronous replica; failover must be possible at any moment without data loss.
 
 ## Procedure
-1. `list_instances` — identify all registered instances; AG topology may span them.
-2. `get_ag_health` on the **primary** first, then each secondary. Collect for every
+1. [`list_instances`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — identify all registered instances; AG topology may span them.
+2. [`get_ag_health`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) on the **primary** first, then each secondary. Collect for every
    replica/database pair: role, synchronization_state, synchronization_health,
    send_queue_kb, redo_queue_kb, redo_rate_kb_sec, last_commit_time.
 3. If any database shows `NOT SYNCHRONIZING`, `SUSPENDED`, or a growing queue, run
-   `get_wait_stats` on the affected replica and check for HADR_* waits, then
-   `get_long_running_transactions` on the primary (an open transaction blocks log
+   [`get_wait_stats`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) on the affected replica and check for HADR_* waits, then
+   [`get_long_running_transactions`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) on the primary (an open transaction blocks log
    truncation and inflates send queues).
-4. If redo is the concern, run `get_vlf_count` on the affected database — VLF counts
-   above threshold serialize redo — and `get_file_io_stats` on the secondary to rule
+4. If redo is the concern, run [`get_vlf_count`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) on the affected database — VLF counts
+   above threshold serialize redo — and [`get_file_io_stats`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) on the secondary to rule
    out storage latency on the log/data files.
-5. `get_backup_status` — confirm log backups are running; log backup failures on any
+5. [`get_backup_status`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — confirm log backups are running; log backup failures on any
    replica surface as availability risk during long outages.
 
 ## Thresholds — what "good" looks like here
@@ -44,10 +44,10 @@ synchronous replica; failover must be possible at any moment without data loss.
 ## Decision rules
 - **SUSPENDED data movement** → report as CRITICAL. Most common causes in this
   estate: manual suspend, disk full on secondary, log growth failure. Check
-  `get_database_files` for free-space/growth settings before recommending resume.
+  [`get_database_files`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) for free-space/growth settings before recommending resume.
   Recommended action: `ALTER DATABASE [<db>] SET HADR RESUME` — draft it, human runs it.
 - **Send queue growing on primary** → look for an open transaction
-  (`get_long_running_transactions`) or network between replicas; do NOT recommend
+  ([`get_long_running_transactions`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts)) or network between replicas; do NOT recommend
   failover while the send queue is non-trivial on a sync replica — that is data loss.
 - **Redo queue growing on secondary** → the secondary is behind for reads and slow
   for failover (RTO risk). Correlate with VLF count and secondary storage latency.

@@ -1,8 +1,8 @@
 -- =====================================================================
--- SqlServer3 — DBA monitoring login ("maintenance neglect" fleet member)
+-- SqlServer3 — DBA monitoring login (reserved fleet member)
 -- Mirrors the dba_monitor account on SqlServer1/2.
--- Server-level DMV permissions only; ReportingDB is created by
--- seed-maintenance-neglect.sh, not here.
+-- Server-level DMV permissions only; any demo-specific databases are created
+-- by their respective seed scripts.
 -- =====================================================================
 
 USE master;

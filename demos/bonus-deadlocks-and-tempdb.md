@@ -1,78 +1,72 @@
-# Bonus — Deadlocks & TempDB Contention (optional, ~5 min)
+# Bonus · Deadlocks & TempDB
 
-**Point being made:** a deadlock graph is unreadable to most people who aren't
-staring at XML for a living. The agent reads the same `system_health` ring
-buffer and tells you, in one sentence, who won, who lost, and why. TempDB
-pressure is the secondary check in the same prompt — a real, live look at
-tempdb whether or not it happens to catch something interesting at that moment.
+**A deadlock graph is unreadable XML to most people. The agent reads the same `system_health` ring buffer and tells you — in one sentence — who won, who lost, and why.**
 
-## Requires
-The fleet profile (`docker compose --profile fleet up -d`) brought up and
-initialized — see [compose/README.md](../compose/README.md#fleet-profile-bonus-demos).
-`SqlServer4` registered in `.env` `INSTANCES`.
+*Optional (~5 min) · requires the fleet profile (SqlServer4).*
 
-## Demo style
-**Editor + terminal** for the seed script, **Copilot Chat agent mode** for the
-investigation.
+---
 
-## Pre-demo state
-- Fresh Copilot chat.
+## Before you start
 
-## Setup — trigger a real deadlock + tempdb pressure (open in editor, run below)
-`demos/sql/seed-deadlocks-tempdb.sh`:
+- Fleet profile up; SqlServer4 registered in `.env`
+- Run the fleet setup:
+  ```bash
+  docker compose --profile fleet up -d
+  ```
+- Fresh Copilot chat
+- **Attach the skill** (recommended for deterministic behavior):
+  Click **Add Context → Instructions** and select `.github/instructions/deadlock-and-tempdb.instructions.md`
+  This loads the SOP so the agent auto-applies the diagnostic procedure to your prompt
+
+---
+
+## Setup — trigger a deadlock + tempdb pressure
+
 ```bash
-cd demos/sql
-./seed-deadlocks-tempdb.sh
+./demos/sql/seed-deadlocks-tempdb.sh
 ```
-Fires two sessions against `DeadlockDemoDB` updating `TableA` and `TableB` in
-opposite order — a textbook deadlock. SQL Server picks a victim and rolls it
-back automatically; the graph lands in the `system_health` Extended Events ring
-buffer — reliably, every run. The script also kicks off one large unindexed
-sort in the background as a tempdb-pressure aside; whether `get_tempdb_usage`
-catches it mid-flight depends on timing and how fast this container's CPU
-churns through it, so treat that half as a bonus, not the headline.
 
-## The prompt (paste into Copilot Chat)
+Two sessions update `TableA`/`TableB` in opposite order — a textbook deadlock,
+landed in the ring buffer reliably. A background unindexed sort adds tempdb pressure.
+
+---
+
+## The prompt
+
 > Were there any deadlocks recently on SqlServer4? Tell me which session won,
 > which lost, and what they were doing. Also check tempdb usage while you're in there.
 
-## Expected agent behavior
-1. `get_deadlock_history(instance_name: "SqlServer4")` → parses the ring
-   buffer, reports the victim and survivor sessions, the statements each was
-   running (`UPDATE dbo.TableA...` / `UPDATE dbo.TableB...`), and the lock
-   resources involved. This one is reliable every run — lead with it.
-2. `get_tempdb_usage(instance_name: "SqlServer4")` → file-space numbers are
-   always real; the top-consuming-session breakdown may or may not catch the
-   background sort mid-flight depending on timing in this small container.
-   Either outcome is a fine, honest result to narrate.
-3. Synthesizes: identifies the classic opposite-lock-order pattern and — if
-   this were a real app — would recommend a consistent access order across
-   both tables as the actual fix (an index or query tweak doesn't fix a
-   deadlock caused by lock ordering).
+---
 
-## Talking points
-- "Nobody reads a deadlock graph XML by hand anymore. That's the whole value
-  of this tool — it's not new data, it's the same ring buffer every DBA has
-  always had, just translated."
-- "The fix for a deadlock is almost never a query tuning fix — it's an
-  application access-order fix. Watch whether the agent gets that right
-  instead of suggesting an index."
-- "Whatever tempdb shows right now is real, live data — that's the point,
-  not whether it happens to catch a spike on this exact call."
+## What you'll see
 
-## Reset
-```bash
-cd demos/sql
-./reset-deadlocks-tempdb.sh
-```
-No tempdb cleanup needed — it's transient and clears when the sort's session ends.
+1. [`get_deadlock_history`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) → victim + survivor, the `UPDATE` statements, the lock resources — **reliable every run**
+2. [`get_tempdb_usage`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) → file space is always real; the top-session catch is timing-dependent (honest either way)
+3. Synthesis: the opposite-lock-order pattern; the fix is **application access order**, not an index
 
-## Failure modes / fallback
-- **No deadlock in the ring buffer** → deadlocks require the `system_health`
-  XE session to be running (on by default) and enough of a delay for both
-  transactions to actually collide; the 3-second `WAITFOR` should be enough,
-  but a heavily loaded host might need a longer delay — bump the `WAITFOR` if
-  it doesn't reproduce first try.
-- **tempdb usage shows nothing** → the sort finishes fast on a small dataset;
-  re-run just the tempdb-pressure block from the seed script, or increase the
-  cross join further for a bigger, longer-running sort.
+---
+
+## Why it matters
+
+- Nobody reads deadlock XML by hand — same ring buffer every DBA has, just translated
+- The fix for a deadlock is almost never query tuning — watch whether the agent says *access order*
+- Whatever tempdb shows is real, live data — that's the point, not catching a spike on cue
+
+---
+
+## The Skill (optional, for consistency)
+
+**`.github/instructions/deadlock-and-tempdb.instructions.md`** — a reusable SOP that:
+- Defines when to call [`get_deadlock_history`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) vs [`get_tempdb_usage`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts)
+- Names the victim and survivor from the XML
+- Identifies opposite-lock-order as the root cause
+- Sets thresholds (wait time >500ms = warning, deadlock count >5 = critical)
+- Enforces hard boundaries: never recommend `SET DEADLOCK_PRIORITY` as a fix
+
+**Why it matters:** In production, the skill ensures your agent applies the same
+diagnostic sequence every time, every instance, every human—no variation. On stage,
+attach it for a deterministic 4-minute demo that always hits the same talking points.
+
+---
+
+**Next (bonus):** [Fleet-Wide Wait Stats →](bonus-fleet-wide-waits.md)

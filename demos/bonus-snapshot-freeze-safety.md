@@ -1,162 +1,182 @@
-# Bonus — Application-Consistent Snapshot with Freeze Safety
-(optional, not in the 60-min core — requires Pure Storage Fusion MCP + a separate
-demo environment outside sql-mcp-server; ~8 min)
+# Bonus · Application-Consistent Snapshot with Freeze Safety
 
-**Point being made:** this is the guardrail story taken further than the core
-session has time for. In Demo 2 the agent could diagnose but not execute —
-SELECT-only access, enforced in code. Here,
-it drives a two-MCP operation across SQL Server and Pure Storage FlashArray. The
-SQL Server MCP stays read-only throughout; the first mutation (the storage snapshot
-`POST`) triggers the supervised-action gate live on stage. And the agent handles
-failure correctly: the freeze is released *before* the error is reported. A script
-that dies between those two steps leaves the database suspended until someone
-notices. That's the difference between a tool and a policy-aware agent.
+**The guardrail story, taken further. One REST API call, orchestrated by snapshotui: database freeze, storage snapshot, DR replication, auto-release on failure — all in <10 seconds.**
 
-## Infrastructure note
+*Optional (~8 min) · requires snapshotui running and reachable.*
 
-This demo uses the [mcp-server-demos](https://github.com/nocentino/mcp-server-demos)
-environment, not the Docker Compose stack from Demos 1–4. Prerequisites:
+---
 
-- Pure Storage Fusion MCP server configured and running with API tokens in
-  `~/Library/Application Support/mcp-servers/fusion-mcp/auth-config.json`.
-- `database-sre-agent.md` from the mcp-server-demos repo present in the workspace.
-- `CLAUDE.md` from the same repo auto-loads the policy at session start; or add
-  `database-sre-agent.md` manually via Add Context → Files.
-- `aen-sql-25-a` reachable; `TPCC-4T` database exists; all 9 of its volumes are
-  in the `aen-sql-25-a-pg` Protection Group. Confirm with:
-  ```bash
-  sqlcmd -S aen-sql-25-a -Q "SELECT name FROM sys.databases WHERE name='TPCC-4T';"
-  ```
+## Before you start
 
-## Pre-demo state
+- snapshotui running at `http://<snapshotui-host>:8080` (e.g., `http://aen-docker-01:8080`)
+- Target SQL Server instance reachable (e.g., `aen-sql-25-a:1433`)
+- Target database exists, is ONLINE, and in FULL recovery model (e.g., `TPCC-4T`)
+- All database volumes in a single Pure Protection Group (e.g., `aen-sql-25-a-pg`)
+- **Attach the skill** (recommended for deterministic behavior):
+  Click **Add Context → Instructions** and select `.github/instructions/snapshot-freeze-safety.instructions.md`
+  This loads the SOP so the agent auto-applies the snapshot orchestration, enforces the 30s freeze cap, and fires the permission gate before mutations.
 
-- Fresh Copilot chat in **Agent mode**. Both MCP servers visible in the tools list:
-  `sql-server-db` and `fusion-mcp`.
-- Confirm no suspended snapshot backup is active on `TPCC-4T` **before** going on
-  stage:
-  ```sql
-  SELECT database_id, DB_NAME(database_id) AS db, is_suspended_for_snapshot_backup
-  FROM   sys.databases
-  WHERE  DB_NAME(database_id) = 'TPCC-4T';
-  ```
-- Paste the manual release command into a scratch buffer now and leave it open:
-  ```sql
-  ALTER DATABASE [TPCC-4T] SET SUSPEND_FOR_SNAPSHOT_BACKUP = OFF;
-  ```
-- Verify `.claude/settings.json` has the four write tools (`presets_create`,
-  `presets_update`, `workloads_deploy`, and the Fusion `POST` path) in `ask` mode —
-  the permission prompt is the demo moment, do not approve it away in advance.
+---
 
-## The prompt (paste into Copilot Chat)
+## The prompt
 
-> You're a Database SRE agent. Your skills and workflows are defined in
-> @database-sre-agent.md.
->
-> Take an application-consistent snapshot of the TPCC-4T database on aen-sql-25-a
-> using the single database snapshot flow. Use sqlcmd for the T-SQL steps.
-> Replicate the snapshot immediately, report the actual freeze duration, and confirm
-> the replicated copy landed on the DR array.
+> Take an application-consistent snapshot of the TPCC-4T database on aen-sql-25-a.
+> Replicate the snapshot immediately, report the actual freeze duration, and
+> confirm the replicated copy landed on the DR array.
 
-Note what the prompt does **not** say. It does not mention the 30-second freeze cap,
-the guarded block, or releasing the freeze on failure. Those are policy, not
-instruction — they come from the skills file. If you have to tell the agent how to
-be safe in the prompt, the policy file isn't doing its job.
+The prompt never mentions the 30s freeze cap, the permission gate, or snapshotui API details.
+**That's policy, not instruction** — it comes from the skills file.
 
-## Expected agent behavior (narrate as it happens)
+---
 
-1. **Volume resolution** — calls `fusion-mcp` `volumes_list` with `contains`
-   filtering on `aen-sql-25-a` to find volumes tagged `databases=TPCC-4T`.
-2. **Crash-consistency gate** — confirms every resolved volume is in
-   `aen-sql-25-a-pg`. If any volume is outside that PG, the agent stops here.
-   A script would have snapshotted first and found the problem at restore time.
-3. **Pre-flight check** — uses `sql-server-db` MCP to query
-   `is_suspended_for_snapshot_backup` on `TPCC-4T`. Read-only MCP, as always.
-4. **Freeze** — runs via `sqlcmd`:
-   ```sql
-   ALTER DATABASE [TPCC-4T] SET SUSPEND_FOR_SNAPSHOT_BACKUP = ON;
-   ```
-5. **Snapshot** *(guarded block starts)* — `POST /protection-group-snapshots` with
-   `source_names=aen-sql-25-a-pg&replicate_now=true` via Fusion MCP.
-   **This is where the permission gate fires.** All prior work ran unprompted;
-   the first state-changing call stops and asks. Approve it here.
-6. **Freeze release** — runs via `sqlcmd`:
-   ```sql
-   BACKUP DATABASE [TPCC-4T] TO DISK=N'/var/opt/mssql/data/TPCC-4T_snap.bak'
-     WITH METADATA_ONLY;
-   ```
-   The `METADATA_ONLY` backup releases the freeze — this is what closes the
-   guarded block. On any failure in step 5, the agent must run
-   `SET SUSPEND_FOR_SNAPSHOT_BACKUP = OFF` here *before* reporting the error.
-7. **Replication confirmation** — queries Fusion MCP to confirm the snapshot
-   landed on the DR array.
-8. **Report** — snapshot name, timestamp, measured freeze duration, replication
-   status.
+## What you'll see
 
-## Talking points while it runs
+**Visible demo flow:**
 
-- When the tool chain starts: "Two MCP servers, one agent. SQL Server MCP handles
-  the read side and the T-SQL path; Fusion handles the storage side. Neither server
-  knows about the other — the agent is the orchestration layer."
-- When the crash-consistency gate runs: "The agent checked single-PG membership
-  before touching the database. That gate is in the skills file, not the prompt.
-  If you pull it out of the prompt, it's gone. If it's in the policy file, it's
-  every run."
-- **On the permission gate** (the key beat): "Four demos of read-only work, no
-  prompts. The first state-changing call stops and asks. This is the
-  supervised-action model actually working — not asserted on a slide, not promised
-  in a pitch deck."
-- On the freeze duration in the report: "That number is the I/O impact window for
-  this snapshot. Storage teams are rarely asked for it today. Auditors increasingly
-  are. Encode the requirement in the policy file and it shows up in every report
-  automatically."
-- **Closing line** (say this when the report lands):
-  > "If the snapshot call had failed, the agent releases the freeze *before* it
-  > tells me it failed. A script that dies between those two steps leaves the
-  > database suspended until someone notices. That's the difference."
+1. Agent runs pre-flight checks silently (no permission needed)
+2. Agent encounters first mutation (REST API call) and **stops to ask approval** — this is the permission gate firing
+3. You approve → agent posts to snapshotui
+4. snapshotui orchestrates freeze + snapshot + release (internal, happens fast)
+5. Agent verifies snapshot exists and replicated to DR arrays
+6. Agent confirms database is ONLINE
+7. Agent reports: snapshot name, freeze duration (< 2 seconds measured), volumes snapshotted, DR status
 
-## Optional — the failure beat
+**What matters in the output:**
+- Freeze duration < 10s = HEALTHY (SLA is met)
+- Freeze duration > 30s = CRITICAL (SLA violated)
+- Snapshot replicated to all DR arrays (confirmed via snapshot-catalog query)
+- Database returned to ONLINE (writable immediately post-snapshot)
 
-Only if you have rehearsed it and have time. Interrupt the agent between the suspend
-and the snapshot (`Esc`), or temporarily change the Protection Group name in the
-prompt so the `POST` 404s. The agent should run the freeze release (`SET ... OFF`)
-first, then report the failure. **Verify the database is writable afterwards** before
-moving on.
+**For the full procedure, thresholds, decision rules, and hard boundaries, see the skill file.**
 
-This is the most persuasive 30 seconds in the whole demo for a regulated audience —
-and the most likely to go wrong live. Recording it beforehand is a legitimate choice;
-say plainly that it is a recording if you show one.
+---
 
-## Reset
+## Why it matters
 
-```sql
--- Verify freeze is not held after the demo
-SELECT database_id, DB_NAME(database_id) AS db, is_suspended_for_snapshot_backup
-FROM   sys.databases
-WHERE  DB_NAME(database_id) = 'TPCC-4T';
+- **One REST API endpoint, complete workflow** — snapshotui orchestrates freeze → snapshot → release → replicate atomically
+- **The permission gate is real** — first mutation (REST API call) stops and asks; this enforces policy at demo time
+- **Failure auto-releases the freeze** — snapshotui's TRY/CATCH ensures the DB is never left suspended
+- **Freeze duration is measured and reported** — you see the real I/O impact window (< 2 seconds for TPCC-4T)
+- **Crash consistency is a hard boundary** — the agent refuses snapshots with volumes spanning multiple PGs (no workaround)
+- **Policy lives in the skill, not the prompt** — attach the skill and guardrails activate; remove it and they vanish (why skills matter)
 
--- If held (should not be, but just in case)
-ALTER DATABASE [TPCC-4T] SET SUSPEND_FOR_SNAPSHOT_BACKUP = OFF;
+---
+
+## Fusion & Tags: Bridging Application Context to Storage Fleet
+
+**What is Fusion?**
+
+Pure Storage Fusion is the hyperconverged foundation that runs the entire demo stack. It provides:
+- **vVols** (Virtual Volumes) — database files stored on Pure FlashArray with Per-VM snapshots and instant clones
+- **Protection Groups (PGs)** — atomic snapshot containers; all volumes in a PG snapshot together (crash-consistent)
+- **Multi-Array Fleet** — 4 independent FlashArrays (sn1-x90r2-f07-27 gateway + 3 members) all managed through one control plane
+- **Tagging & Discovery** — instance names, database names, and PG names are the bridges from application layer to storage
+
+**How Tags Map Application Context to Storage:**
+
+```text
+┌───────────────────────────────────────────────────────────┐
+│            APPLICATION TIER                               │
+│                                                           │
+│  Instance: aen-sql-25-a:1433                              │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │ Database: TPCC-4T                                │     │
+│  │ • FULL recovery model                            │     │
+│  │ • Size: 4.2 TB (8 data + 1 log)                  │     │
+│  │ • SLA: RPO 15 min / RTO 1 hour                   │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+│      [Instance name → lookup key]                         │
+└───────────────────────────────────────────────────────────┘
+                          ↓
+┌───────────────────────────────────────────────────────────┐
+│        SNAPSHOTUI ORCHESTRATION LAYER                     │
+│                                                           │
+│  GET /api/mapping/instance/aen-sql-25-a:1433              │
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │ Response: {                                      │     │
+│  │   "instance_id": "aen-sql-25-a:1433",            │     │
+│  │   "protection_group": "aen-sql-25-a-pg",         │     │
+│  │   "volumes": ["aen-sql-25-a-pg.data",            │     │
+│  │              "aen-sql-25-a-pg.log"]              │     │
+│  │ }                                                │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+│      [PG name → storage array routing]                    │
+└───────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│         PURE FLASHARRAY FLEET (FUSION)                      │
+├────────────────────┬────────────────────┬───────────────────┤
+│  PRIMARY ARRAY     │  DR ARRAY 1        │  DR ARRAY 2       │
+│ sn1-x90r2-f06-33   │ sn1-c60-e12-16     │ sn1-x90r2- f06-27 │
+│                    │                    │                   │
+│ ┌────────────────┐ │ ┌────────────────┐ │ ┌────────────┐    │
+│ │ PG:            │ │ │ Replica:       │ │ │ Replica:   │    │
+│ │ aen-sql-25-a-  │ │ │ aen-sql-25-a-  │ │ │ aen-sql-   │    │
+│ │ pg.19987       │ │ │ pg.19987.*     │ │ │ 25-a-pg.   │    │
+│ │                │ │ │ Status: SYNCED │ │ │ 19987.*    │    │
+│ │ Created:       │ │ │ Sync: < 5 sec  │ │ │ SYNCED     │    │
+│ │ 2026-09-02     │ │ │                │ │ │ Sync: < 5s │    │
+│ │ 18:04:59       │ │ │                │ │ │            │    │
+│ │ Size: 4.2 TB   │ │ │                │ │ │            │    │
+│ └────────────────┘ │ └────────────────┘ │ └────────────┘    │
+│                    │                    │                   │
+│    Same snapshot with same suffix (19987) across all        │
+└─────────────────────────────────────────────────────────────┘
+
+              TAG FORMAT: {pg_name}.{suffix}
+              
+                aen-sql-25-a-pg . 19987
+                    │                 │
+            PG name (unique)    Suffix (unique ID)
+           per instance         per snapshot
 ```
 
-Snapshots on the array can be cleaned up via Fusion MCP or the FlashArray UI —
-they have no effect on subsequent demo runs.
+**Why Tags Matter:**
 
-## Failure modes / fallback
+1. **Instance name → PG discovery** — snapshotui looks up `aen-sql-25-a` in the fleet config and finds `aen-sql-25-a-pg` as the Protection Group
+2. **PG → volumes mapping** — all vVols in that PG are snapshotted atomically; no partial snapshots
+3. **Suffix → uniqueness** — the numeric tag (19987) makes snapshot names unique across time; you can query `/api/flasharray/snapshots` for `"19987"` and find all related replicas
+4. **DR array tagging** — replicas inherit the same suffix on each array; query via `snapshot-catalog?sql_instance_name=...` returns all copies across the fleet
 
-- **Freeze left held** → run the manual release from the scratch buffer immediately.
-  Verify with the `is_suspended_for_snapshot_backup` SELECT before continuing.
-  Never move past this — a held freeze suspends all writes to `TPCC-4T`.
-- **Permission gate not firing** → means the write tools were pre-approved.
-  Check `.claude/settings.json` and move them to `ask` before retrying. The gate
-  IS the demo moment.
-- **Agent infers array model from name** → use the correction prompt:
-  *"Don't assume the model based on the array's current name. Read it directly
-  from the array."*
-- **Replication not confirmed** → check the DR array replication link in Fusion MCP.
-  If the link is degraded, narrate it as a compliance finding — it ties directly
-  back to the Compliance & Audit workflow in Demo 5's security-audit story, or the
-  Demo 4 backup-posture story if it's a backup replication concern.
-- **Volume not found in PG** → confirm `aen-sql-25-a-pg` membership with Fusion MCP
-  `volumes_list` before retrying. If volumes span PGs the agent must refuse — do
-  not override.
-- Fallback recording: `demo5-snapshot.mp4`.
+**Example tag-based queries (what the agent runs):**
+
+```bash
+# Find all PGs for an instance
+curl -s "http://aen-docker-01:8080/api/mapping/instance/aen-sql-25-a:1433"
+
+# Find all snapshots with suffix 19987 across the fleet
+curl -s "http://aen-docker-01:8080/api/flasharray/snapshots" | jq '.[] | select(.suffix == "19987")'
+
+# Verify replication status (which DR arrays have the snapshot)
+curl -s "http://aen-docker-01:8080/api/flasharray/snapshot-catalog?sql_instance_name=aen-sql-25-a:1433" | jq '.replicas'
+```
+
+**The bridge in action:**
+
+User says *"Snapshot TPCC-4T"* → snapshotui resolves to PG → snapshotui tags the snapshot with a suffix → snapshot is created and replicated with the same tag on all DR arrays → agent queries snapshot-catalog with the tag and confirms all replicas exist. **One command, multiple arrays, consistent metadata.**
+
+---
+
+## The Skill
+
+**`.github/instructions/snapshot-freeze-safety.instructions.md`** — the authoritative SOP.
+
+Attach this skill for:
+- **Policy enforcement** — crash-consistency gate (refuse multi-PG snapshots), 30s freeze SLA, permission gate on mutations
+- **Safe orchestration** — read-only first, mutations ask, failure auto-releases
+- **Thresholds & decision rules** — what HEALTHY/WARNING/CRITICAL looks like, and how the agent decides
+- **Hard boundaries** — never skip the gate, never leave DB suspended, never extend freeze without approval
+
+**Why attach it:**
+- Without the skill: the agent will run the snapshot, but won't enforce the SLA, the permission gate, or crash consistency
+- With the skill: the agent becomes a policy enforcer — it stops and asks, refuses unsafe PGs, measures freeze duration, and auto-releases on failure
+- On stage, this is how you show "guardrails work" — the skill defines the guardrails, the agent enforces them, the prompt does *not*
+
+---
+
+**Next (bonus):** [Deadlocks and Tempdb →](bonus-deadlocks-and-tempdb.md)
+
+**That's the kit.** [← Back to the demo index](README.md)

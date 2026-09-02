@@ -1,13 +1,17 @@
-# Demo 0 — Cold Open: What's an Agent, What's MCP (Objective 1, ~3 min)
+# Demo 0 · What's an Agent? What's MCP?
 
-**Point being made:** an "AI agent" here is not a chatbot with a clever prompt.
-It's a model in a loop with tools, deciding for itself which ones to call, in
-what order, based on your question. MCP is the standard port that lets any tool
-server plug into any agent client. Nothing in this session is a plugin — it's
-all HTTP.
+**Cold open — the one big idea before we touch a container.**
 
-No live demo yet — this is the two minutes of framing before Demo 1 starts the
-containers. Draw or paste the diagrams below; there is no deck.
+---
+
+## An agent isn't a chatbot with a clever prompt
+
+- A **model in a loop with tools**
+- It decides **which** tool to call, and in what order — from your question alone
+- **MCP** is the standard port: any tool server plugs into any agent client
+- Nothing here is a plugin. It's all **HTTP**
+
+---
 
 ## The agent loop
 
@@ -16,31 +20,31 @@ containers. Draw or paste the diagrams below; there is no deck.
         │                                                         │
         │   You: "Are there any blocking sessions right now?"     │
         │                                                         │
-        └───────────────────────────┬─────────────────────────────┘
+        └────────────────────────────┬────────────────────────────┘
                                      ▼
                          ┌───────────────────────┐
                          │   Language Model      │
                          │   (decides WHAT to    │
-                         │    call, not HOW)      │
+                         │    call, not HOW)     │
                          └───────────┬───────────┘
                                      │ tool call
                                      ▼
                          ┌───────────────────────┐
-                         │   MCP Client           │
-                         │   (Copilot Chat)       │◄──── mcp.json names
+                         │   MCP Client          │
+                         │   (Copilot Chat)      │◄──── mcp.json names
                          └───────────┬───────────┘        the servers
                                      │ HTTP
                                      ▼
                          ┌───────────────────────┐
-                         │   MCP Server           │
-                         │   (sql-mcp-server)     │
-                         │   runs the real T-SQL  │
+                         │   MCP Server          │
+                         │   (sql-mcp-server)    │
+                         │   runs the real T-SQL │
                          └───────────┬───────────┘
                                      │ TDS
                                      ▼
                          ┌───────────────────────┐
-                         │   SQL Server           │
-                         │   (the DMVs)           │
+                         │   SQL Server          │
+                         │   (the DMVs)          │
                          └───────────────────────┘
 
      The model never touches the database. It calls the tool.
@@ -48,28 +52,30 @@ containers. Draw or paste the diagrams below; there is no deck.
      queries exist to be called.
 ```
 
+---
+
 ## Two MCP servers, two trust boundaries
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                          Docker Compose network                     │
-│                                                                       │
+│                       Docker Compose network                        │
+│                                                                     │
 │  ┌────────────────┐        CRUD         ┌───────────────────────┐   │
 │  │                │◄────────────────────│  products-db (DAB)    │   │
 │  │  sqlserver1    │                     │  :5001 — zero-code    │   │
 │  │  ProductsDB    │                     │  REST/GraphQL/MCP     │   │
 │  │  :1433         │                     │  scoped to 4 tables   │   │
 │  │                │                     └───────────────────────┘   │
-│  │                │      SELECT only     ┌───────────────────────┐  │
-│  │                │◄─────────────────────│  sql-dba (custom)     │  │
-│  │                │                      │  :3001 — 34 DMV tools │  │
-│  └────────────────┘                      │  safety.ts allowlist  │  │
-│         ▲                                └───────────────────────┘  │
-│         │ SELECT only                             ▲                 │
-│  ┌────────────────┐                                │                 │
-│  │  sqlserver2    │────────────────────────────────┘                 │
-│  │  (secondary)   │        multi-instance fan-out                    │
-│  └────────────────┘                                                  │
+│  │                │    SELECT only      ┌───────────────────────┐   │
+│  │                │◄────────────────────│  sql-dba (custom)     │   │
+│  │                │                     │  :3001 — 34 DMV tools │   │
+│  └────────────────┘                     │  safety.ts allowlist  │   │
+│          ▲                              └───────────────────────┘   │
+│          │ SELECT only                              ▲               │
+│  ┌────────────────┐                                 │               │
+│  │  sqlserver2    │─────────────────────────────────┘               │
+│  │  (secondary)   │    multi-instance fan-out                       │
+│  └────────────────┘                                                 │
 └─────────────────────────────────────────────────────────────────────┘
 
   products-db: scoped CRUD, application data, DAB enforces the rules.
@@ -78,7 +84,9 @@ containers. Draw or paste the diagrams below; there is no deck.
   that spans both — and it still can't do anything either server disallows.
 ```
 
-## Tools vs. skills vs. guardrails (the shape of the whole session)
+---
+
+## Tools → Skills → Guardrails
 
 ```
   TOOLS       →  give the agent eyes.       (Demo 2: blocking + DAB, no skill attached)
@@ -86,14 +94,14 @@ containers. Draw or paste the diagrams below; there is no deck.
   GUARDRAILS  →  keep a human in the loop.  (Demo 7: synthesis — what stopped the agent, every time)
 ```
 
-## Talking points
-- "An agent is a model in a loop with tools. The loop is the whole trick —
-  it re-reads its own tool results and decides what to call next."
-- "MCP is boring on purpose. It's HTTP and JSON. That's why it works with
-  Copilot, Claude, or anything else that speaks the protocol."
-- "Watch for three things across the next hour: what tools existed (Demo 2),
-  what judgment a skill file adds on top of the same tools (Demos 3-6), and
-  what the agent refused to do without a human (every demo, synthesized in 7)."
+---
 
-## Reset
-None — this is narration only, no environment state.
+## Watch for three things this hour
+
+1. What **tools** exist — Demo 2
+2. What **judgment** a skill file adds on top of the same tools — Demos 3–6
+3. What the agent **refused** to do without a human — every demo, synthesized in Demo 7
+
+---
+
+**Next:** [Demo 1 · Install & Configure the MCP Server →](01-install-and-configure.md)
