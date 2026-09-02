@@ -1,8 +1,8 @@
 # Demo Index: Build Your Own DBA Agent (60-min session)
 
 No deck. This folder *is* the session: markdown runbooks, ASCII diagrams, live
-terminal, and live Copilot Chat. See the main [README.md](../README.md) for the
-full conference abstract.
+terminal, and live Copilot Chat. I run every demo straight from these files. See the main
+[README.md](../README.md) for the full conference abstract.
 
 ---
 

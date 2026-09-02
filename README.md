@@ -1,13 +1,13 @@
 # Build Your Own DBA Agent: 60-min Conference Session
 
-Self-contained demo kit for a DBA agent built on
+I built this demo kit for a 60-minute conference session on building a DBA agent with
 [sql-mcp-server](https://github.com/nocentino/sql-mcp-server). There's no deck; this
 is a demo-driven session. `docker compose up -d` from this repo's root brings
-up the whole environment; the MCP server image is built directly from the
-sql-mcp-server GitHub repo (no local checkout of that repo needed). See
-[demos/README.md](demos/README.md) for the full run-of-show; ASCII architecture
-diagrams live in the demo files themselves (start at
-[demos/00-intro-and-architecture.md](demos/00-intro-and-architecture.md)).
+up the whole environment, and the MCP server image is built directly from the
+sql-mcp-server GitHub repo, so you don't need a local checkout of that repo.
+See [demos/README.md](demos/README.md) for the full run-of-show. The ASCII architecture
+diagrams live in the demo files themselves, starting at
+[demos/00-intro-and-architecture.md](demos/00-intro-and-architecture.md).
 
 ## Conference abstract
 
@@ -31,7 +31,7 @@ diagrams live in the demo files themselves (start at
 
 **Model Context Protocol (MCP)** is a standardized way to connect language models to tools, data sources,
 and systems. Unlike APIs where a client makes direct calls, MCP is a *bidirectional contract* between
-the LLM and your infrastructure. Here's what that means for database operations:
+the LLM and your infrastructure. Here's what that means for database operations.
 
 ### How MCP gives you control
 
@@ -67,10 +67,12 @@ the LLM and your infrastructure. Here's what that means for database operations:
 
 ### Why this matters for operations
 
+I keep coming back to four things when I explain this architecture to a security team:
+
 - **You stay in control**, not the LLM. The agent works *for* you, within boundaries you define.
 - **You can iterate safely**, because tool exposure, skill rules, and gates are configuration: change them without code changes.
 - **You can reason about risk**, because tool definitions and skills are human-readable policies, not buried in model weights.
-- **You can test**, because you can run the same scenario with/without a skill, with/without different tool subsets, to validate behavior before production deployment.
+- **You can test**, because you can run the same scenario with or without a skill, with or without different tool subsets, to validate behavior before production deployment.
 
 ---
 
@@ -93,7 +95,7 @@ the LLM and your infrastructure. Here's what that means for database operations:
 
 ## Quick start
 
-One command to start the entire stack (all SQL servers, MCP servers, and AG initialization):
+I wired this up so one command starts the entire stack: all SQL servers, MCP servers, and AG initialization.
 
 ```bash
 ./compose/startup.sh
@@ -123,3 +125,9 @@ To stop and remove everything (containers, volumes, networks):
 ```
 
 Removes all running containers and persistent volumes. To restart, run `./compose/startup.sh` again.
+
+## Wrapping up
+
+That's the whole kit: two SQL Server instances, two MCP servers, and a set of skill files
+that turn generic tool access into a DBA who follows your runbook. Clone it, run
+`./compose/startup.sh`, and start at [demos/README.md](demos/README.md).

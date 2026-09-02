@@ -1,8 +1,8 @@
 # AG Setup + Fleet Profile
 
-`compose/docker-compose.yml` is one consolidated file. HADR is already enabled
+I keep `compose/docker-compose.yml` as one consolidated file. HADR is already enabled
 on `sqlserver1`/`sqlserver2` by default, and the fleet instances
-(`sqlserver3`/`sqlserver4`) are behind a Compose profile so they don't start
+(`sqlserver3`/`sqlserver4`) sit behind a Compose profile so they don't start
 unless you ask for them.
 
 ---

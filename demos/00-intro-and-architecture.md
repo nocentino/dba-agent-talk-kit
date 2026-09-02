@@ -1,10 +1,12 @@
 # Demo 0 · What's an Agent? What's MCP?
 
-**Cold open: the one big idea before we touch a container.**
+**Cold open: the one big idea I want you to walk away with before we touch a container.**
 
 ---
 
 ## An agent isn't a chatbot with a clever prompt
+
+I want to be clear about this up front, because it changes how you think about everything else today:
 
 - A **model in a loop with tools**
 - It decides **which** tool to call, and in what order, from your question alone
@@ -97,6 +99,8 @@
 ---
 
 ## Watch for three things this hour
+
+Here's what I want you tracking as we go:
 
 1. What **tools** exist (Demo 2)
 2. What **judgment** a skill file adds on top of the same tools (Demos 3-6)

@@ -57,6 +57,7 @@
 > Repo: **github.com/nocentino/sql-mcp-server**, the MCP server, the compose stack, and the wiring.
 
 The architecture is four markdown files and an HTTP endpoint. That's the whole thing.
+Clone it, point it at your own estate, and let me know how it works for you.
 
 ---
 

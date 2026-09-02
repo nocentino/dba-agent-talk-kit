@@ -6,7 +6,7 @@
 
 ## The trust boundary, made visible
 
-Nothing → two containers → one JSON block → tools appear in Copilot Chat.
+I want you to see this happen, not just take my word for it: nothing → two containers → one JSON block → tools appear in Copilot Chat.
 
 - Not a plugin, not an extension, not magic
 - No `mcp.json` entry = no path to your SQL Server
