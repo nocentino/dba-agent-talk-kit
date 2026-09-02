@@ -13,52 +13,8 @@
 - Target database exists, is ONLINE, and in FULL recovery model (e.g., `TPCC-4T`)
 - All database volumes in a single Pure Protection Group (e.g., `aen-sql-25-a-pg`)
 - **Attach the skill** (recommended for deterministic behavior):
-  Click **Add Context → Instructions** and select `.github/instructions/snapshot-freeze-safety.instructions.md`
+  Click **Add Context → Instructions** and select [snapshot-freeze-safety.instructions.md](../.github/instructions/snapshot-freeze-safety.instructions.md)
   This loads the SOP so the agent auto-applies the snapshot orchestration, enforces the 30s freeze cap, and fires the permission gate before mutations.
-
----
-
-## The prompt
-
-> Take an application-consistent snapshot of the TPCC-4T database on aen-sql-25-a.
-> Replicate the snapshot immediately, report the actual freeze duration, and
-> confirm the replicated copy landed on the DR array.
-
-The prompt never mentions the 30s freeze cap, the permission gate, or snapshotui API details.
-**That's policy, not instruction** — it comes from the skills file.
-
----
-
-## What you'll see
-
-**Visible demo flow:**
-
-1. Agent runs pre-flight checks silently (no permission needed)
-2. Agent encounters first mutation (REST API call) and **stops to ask approval** — this is the permission gate firing
-3. You approve → agent posts to snapshotui
-4. snapshotui orchestrates freeze + snapshot + release (internal, happens fast)
-5. Agent verifies snapshot exists and replicated to DR arrays
-6. Agent confirms database is ONLINE
-7. Agent reports: snapshot name, freeze duration (< 2 seconds measured), volumes snapshotted, DR status
-
-**What matters in the output:**
-- Freeze duration < 10s = HEALTHY (SLA is met)
-- Freeze duration > 30s = CRITICAL (SLA violated)
-- Snapshot replicated to all DR arrays (confirmed via snapshot-catalog query)
-- Database returned to ONLINE (writable immediately post-snapshot)
-
-**For the full procedure, thresholds, decision rules, and hard boundaries, see the skill file.**
-
----
-
-## Why it matters
-
-- **One REST API endpoint, complete workflow** — snapshotui orchestrates freeze → snapshot → release → replicate atomically
-- **The permission gate is real** — first mutation (REST API call) stops and asks; this enforces policy at demo time
-- **Failure auto-releases the freeze** — snapshotui's TRY/CATCH ensures the DB is never left suspended
-- **Freeze duration is measured and reported** — you see the real I/O impact window (< 2 seconds for TPCC-4T)
-- **Crash consistency is a hard boundary** — the agent refuses snapshots with volumes spanning multiple PGs (no workaround)
-- **Policy lives in the skill, not the prompt** — attach the skill and guardrails activate; remove it and they vanish (why skills matter)
 
 ---
 
@@ -160,9 +116,66 @@ User says *"Snapshot TPCC-4T"* → snapshotui resolves to PG → snapshotui tags
 
 ---
 
+## The prompt
+
+> Take an application-consistent snapshot of the TPCC-4T database on aen-sql-25-a.
+> Replicate the snapshot immediately, report the actual freeze duration, and
+> confirm the replicated copy landed on the DR array.
+
+The prompt never mentions the 30s freeze cap, the permission gate, or snapshotui API details.
+**That's policy, not instruction** — it comes from the skill file.
+
+---
+
+## What you'll see
+
+**Pre-flight checks (read-only, no permission needed):**
+
+1. [`get_database_info`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — confirm database is ONLINE and FULL recovery
+2. [`get_database_files`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — verify free space > 10%
+3. GET `/api/mapping/instance/{instance_id}` (snapshotui) — verify all volumes in one PG
+4. [`get_long_running_transactions`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) — check for txns > 1 min (increase freeze duration)
+5. Abort immediately if any check fails
+
+**Snapshot request (mutation gate fires here):**
+
+6. Agent stops and asks: *"This will freeze the database for <10 seconds. Approved? (yes/no)"* — **the permission gate**
+7. You approve → POST `/api/sqlserver/instances/{instance_id}/databases/{database_name}/snapshot-backup` (snapshotui)
+8. snapshotui orchestrates:
+   - CHECKPOINT (flush dirty pages)
+   - `SET SUSPEND_FOR_SNAPSHOT_BACKUP = ON` (freeze starts T0)
+   - Pure FlashArray snapshot (atomic all-volumes)
+   - `SET SUSPEND_FOR_SNAPSHOT_BACKUP = OFF` (release freeze T1, runs even on error)
+   - Replication to DR arrays (async, non-blocking)
+
+**Replication verification (read-only):**
+
+9. GET `/api/flasharray/snapshot-catalog?sql_instance_name={instance_id}` — verify snapshot exists on primary and DR arrays
+10. Confirm database returned to ONLINE
+11. Report: snapshot name, freeze duration (T1-T0), volumes snapshotted, DR replication status
+
+**What matters in the output:**
+- Actual freeze duration < 10s = HEALTHY (SLA met)
+- Actual freeze duration > 30s = CRITICAL (SLA violated)
+- Snapshot replicated to all DR arrays (confirmed via catalog query)
+- Database ONLINE (writable immediately post-snapshot)
+
+---
+
+## Why it matters
+
+- **One REST API endpoint, complete workflow** — snapshotui orchestrates freeze → snapshot → release → replicate atomically
+- **The permission gate is real** — first mutation (REST API call) stops and asks; this enforces policy at demo time
+- **Failure auto-releases the freeze** — snapshotui's TRY/CATCH ensures the DB is never left suspended
+- **Freeze duration is measured and reported** — you see the real I/O impact window (< 2 seconds for TPCC-4T)
+- **Crash consistency is a hard boundary** — the agent refuses snapshots with volumes spanning multiple PGs (no workaround)
+- **Policy lives in the skill, not the prompt** — attach the skill and guardrails activate; remove it and they vanish (why skills matter)
+
+---
+
 ## The Skill
 
-**`.github/instructions/snapshot-freeze-safety.instructions.md`** — the authoritative SOP.
+**[snapshot-freeze-safety.instructions.md](../.github/instructions/snapshot-freeze-safety.instructions.md)** — the authoritative SOP.
 
 Attach this skill for:
 - **Policy enforcement** — crash-consistency gate (refuse multi-PG snapshots), 30s freeze SLA, permission gate on mutations
