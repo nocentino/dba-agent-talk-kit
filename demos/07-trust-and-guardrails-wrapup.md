@@ -49,14 +49,16 @@
 
 ## Start Monday
 
-1. **Stand up the stack**: `docker compose up -d` (SQL ×2 + DAB + MCP server)
+1. **Stand up the stack**: `./compose/startup.sh` (SQL x4 + DAB + MCP server + AG)
 2. **Wire `mcp.json`**: point Copilot at `:3001` and `:5001`
-3. **Drop in the skills**: copy the four `*.instructions.md` files into `.github/instructions/`
+3. **Drop in the skills**: copy the six `*.instructions.md` files into `.github/instructions/`
 4. **Write your own**: persona → triggers → procedure → **thresholds** → rules → boundaries
 
-> Repo: **github.com/nocentino/sql-mcp-server**, the MCP server, the compose stack, and the wiring.
+> Repo: **github.com/nocentino/sql-mcp-server** for the MCP server itself;
+> **github.com/nocentino/dba-agent-talk-kit** (this repo) for the compose stack,
+> skill files, and demo wiring.
 
-The architecture is four markdown files and an HTTP endpoint. That's the whole thing.
+The architecture is a handful of markdown files and an HTTP endpoint. That's the whole thing.
 Clone it, point it at your own estate, and let me know how it works for you.
 
 ---

@@ -151,7 +151,7 @@ services:
   # ---------------------------------------------------------------------
   # Fleet overlay (bonus demos only) — start with:
   #   docker compose --profile fleet up -d
-  # sqlserver3: "maintenance neglect" (fragmentation, failed SQL Agent job)
+  # sqlserver3: reserved fleet member (SQL Agent enabled, no demo-specific seed yet)
   # sqlserver4: "deadlocks & tempdb"
   # Neither joins AG_Products; register both in .env INSTANCES to query them.
   # ---------------------------------------------------------------------

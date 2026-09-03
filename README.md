@@ -83,7 +83,7 @@ I keep coming back to four things when I explain this architecture to a security
 | compose/docker-compose.yml | The whole environment: sqlserver1/2, dab-mcp, sql-mcp-server (built from GitHub), plus a `fleet` profile for 2 bonus-demo instances |
 | scripts/ | dba_monitor + ProductsDB init scripts for all 4 SQL Server instances |
 | dab-config.json | DAB entity config (Products/Categories/Orders/OrderDetails) |
-| demos/ | 8 core demo runbooks (00-07) + 4 bonus demos + seed/reset scripts (demos/sql/) |
+| demos/ | 9 core demo runbooks (00-07, plus 02b) + 3 bonus demos + seed/reset scripts (demos/sql/) |
 | .github/instructions/ | Copilot persona + 6 domain skill files (availability, backup-recovery, deadlock-tempdb, observability, security-audit, snapshot-freeze-safety) |
 | compose/ | The compose file + AG helper scripts (init-ag.sh, verify-ag.sh); HADR itself is already on by default |
 | deck/DBA-Agent-with-MCP.pptx | Optional reference only, not used in the live session |

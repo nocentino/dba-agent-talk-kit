@@ -67,10 +67,10 @@ All in [sql/](sql/), run from `demos/sql/` (they `source ../../.env`):
 
 | Script | Used by |
 |---|---|
-| `seed-blocking.sh` / `clear-blocking.sh` | Demo 2 |
+| `seed-blocking.sh` / `reset-blocking.sh` | Demo 2 |
 | `seed-fleet-load.sh` | Bonus: fleet-wide waits |
 | `seed-ag-lag.sh` / `resume-ag.sh` | Demo 3 |
 | `seed-backup-gaps.sh` | Demo 4 |
-| `seed-security-issues.sh` | Demo 5 |
-| `seed-observability-load.sh` | Demo 6 |
+| `seed-security-issues.sh` / `reset-security-issues.sh` | Demo 5 |
+| `seed-observability-load.sh` / `reset-observability-load.sh` | Demo 6 |
 | `seed-deadlocks-tempdb.sh` / `reset-deadlocks-tempdb.sh` | Bonus: deadlocks & tempdb (SqlServer4) |

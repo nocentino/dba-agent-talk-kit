@@ -72,8 +72,8 @@ HADR is already on from the core `up -d` above; no separate overlay needed.
 ## Fleet profile (bonus demos)
 
 Adds two more standalone SQL Server instances so fleet-wide demos have four
-genuinely different members instead of two: `sqlserver3` (a neglected instance:
-stale stats, fragmentation, a failing SQL Agent job) and `sqlserver4` (a
+genuinely different members instead of two: `sqlserver3` (reserved, SQL Agent
+enabled, no demo-specific seed yet) and `sqlserver4` (a
 busy instance: deadlocks, tempdb pressure). Neither joins `AG_Products`.
 
 ### Bring-up
