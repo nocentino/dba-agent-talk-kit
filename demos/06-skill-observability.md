@@ -11,26 +11,26 @@
 
 ---
 
-## Setup: seed a little real load
+## Setup — seed a little real load
 
 ```bash
 ./demos/sql/seed-observability-load.sh
 ```
 
-~20k skewed rows (`Electronics` ≈ 3%) + ~30 filtered/join queries, just enough
+~20k skewed rows (`Electronics` ≈ 3%) + ~30 filtered/join queries — just enough
 to give [`get_missing_indexes`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) a real, high-impact recommendation.
 
 ---
 
 ## The prompt
 
-> Pull a full health snapshot of SqlServer1: server info, databases, wait
+> Pull a full health snapshot of SqlServer1 — server info, databases, wait
 > stats, top queries by CPU, any blocking, and missing indexes. Write it up as
 > an incident report.
 
 ---
 
-## What you'll see: the same order, every time
+## What you'll see — the same order, every time
 
 1. [`get_server_info`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) → four config baselines (MAXDOP, CTFP, max memory, ad-hoc)
 2. [`get_database_info`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) → recovery model, size, `log_reuse_wait_desc`
@@ -43,10 +43,10 @@ to give [`get_missing_indexes`](https://github.com/nocentino/sql-mcp-server/blob
 
 ## Why it matters
 
-- Same seven calls, same order, healthy or on fire; **the SOP doesn't change with the model's mood**
-- Config drift is reported even when nothing's wrong; *drift is the finding*
-- Missing-index DDL ships with a "check for overlap first" warning; don't trust the optimizer blindly
-- Report closes with **"What I did NOT check"**; scope you can trust
+- Same seven calls, same order, healthy or on fire — **the SOP doesn't change with the model's mood**
+- Config drift is reported even when nothing's wrong — *drift is the finding*
+- Missing-index DDL ships with a "check for overlap first" warning — don't trust the optimizer blindly
+- Report closes with **"What I did NOT check"** — scope you can trust
 
 ---
 

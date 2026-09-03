@@ -1,20 +1,20 @@
-# Demo 2 · Tools Without Skills: Blocking + DAB
+# Demo 2 · Tools Without Skills — Blocking + DAB
 
-**The agent doesn't hand you a query to run. It chains tools, gets the answer, and gives you a diagnosis, then *recommends* the KILL it cannot execute.**
+**The agent doesn't hand you a query to run. It chains tools, gets the answer, and gives you a diagnosis — then *recommends* the KILL it cannot execute.**
 
 ---
 
 ## The point
 
-- No skill attached yet, just tools and a good question
+- No skill attached yet — just tools and a good question
 - The agent picks the DMV itself, chains calls, and synthesizes
-- It **recommends** `KILL`; it **cannot run it** (guardrail #1, paid off in Demo 7)
+- It **recommends** `KILL`; it **cannot run it** (guardrail #1 — paid off in Demo 7)
 
 ---
 
-## Setup: seed the blocker
+## Setup — seed the blocker
 
-Run this from the repo root **1-2 minutes before** starting the demo:
+Run this from the repo root **1–2 minutes before** starting the demo:
 
 ```bash
 ./demos/sql/seed-blocking.sh
@@ -40,30 +40,18 @@ What it does:
 
 ## What you'll see
 
-1. Calls [`get_blocking_chains`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts)(instance_name: "SqlServer1") from the tool description alone
+1. Calls [`get_blocking_chains`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts)(instance_name: "SqlServer1") — from the tool description alone
 2. Names the head blocker (open txn + `WAITFOR`), the `LCK_M_S` waiters, wait time, both SQL texts
-3. Recommends `KILL <spid>` **as a script**; it cannot run it
+3. Recommends `KILL <spid>` **as a script** — it cannot run it
 
-The chain can come back **two levels deep**: the DAB REST scan queues behind the
+The chain can come back **two levels deep** — the DAB REST scan queues behind the
 blocker and then blocks the plain `SELECT` itself. Cross-MCP contention, live.
-
----
-
-## Cleanup
-
-When you're done with the demo, clear the blocking scenario:
-
-```bash
-./demos/sql/clear-blocking.sh
-```
-
-This kills the blocker session and returns the database to a clean state.
 
 ---
 
 ## Why it matters
 
-- It picked the tool from the description; you never named a DMV
+- It picked the tool from the description — you never named a DMV
 - Blocker SQL text comes from `most_recent_sql_handle` (First Responder Kit pattern)
 - **The trust story in one screenshot:** `sql-dba` is SELECT-only, enforced in code, not a prompt
 - It diagnoses; **you decide**
