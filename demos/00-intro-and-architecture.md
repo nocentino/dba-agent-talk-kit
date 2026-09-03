@@ -74,10 +74,10 @@ I want to be clear about this up front, because it changes how you think about e
 │  └────────────────┘                     │  safety.ts allowlist  │   │
 │          ▲                              └───────────────────────┘   │
 │          │ SELECT only                              ▲               │
-│  ┌────────────────┐                                 │               │
-│  │  sqlserver2    │─────────────────────────────────┘               │
-│  │  (secondary)   │    multi-instance fan-out                       │
-│  └────────────────┘                                                 │
+│  ┌─────────────────┐                                │               │
+│  │  sqlserver2,3,4 │────────────────────────────────┘               │
+│  │  (secondary)    │   multi-instance fan-out                       │
+│  └─────────────────┘                                                │
 └─────────────────────────────────────────────────────────────────────┘
 
   products-db: scoped CRUD, application data, DAB enforces the rules.
@@ -91,9 +91,9 @@ I want to be clear about this up front, because it changes how you think about e
 ## Tools → Skills → Guardrails
 
 ```
-  TOOLS       →  give the agent eyes.       (Demo 2: blocking + DAB, no skill attached)
-  SKILLS      →  give the agent judgment.   (Demos 3-6: availability, backup, security, observability)
-  GUARDRAILS  →  keep a human in the loop.  (Demo 7: synthesis, what stopped the agent, every time)
+  TOOLS       →  Structured code that the agents can call. (Demo 2: blocking + DAB, no skill attached)
+  SKILLS      →  Runbooks, guidelines for the agents. (Demos 3-6: availability, backup, security, observability)
+  GUARDRAILS  →  Limits and boundaries to agent's tasks. (Demo 7: synthesis, what stopped the agent, every time)
 ```
 
 ---

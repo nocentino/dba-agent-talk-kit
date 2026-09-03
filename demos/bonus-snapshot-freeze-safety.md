@@ -22,7 +22,7 @@
 
 **What is Fusion?**
 
-Pure Storage Fusion is the hyperconverged foundation that runs the entire demo stack. It provides:
+Everpure Fusion is the foundation that runs the entire demo stack. It provides:
 - **vVols** (Virtual Volumes): database files stored on Pure FlashArray with Per-VM snapshots and instant clones
 - **Protection Groups (PGs)**: atomic snapshot containers; all volumes in a PG snapshot together (crash-consistent)
 - **Multi-Array Fleet**: 4 independent FlashArrays (sn1-x90r2-f07-27 gateway + 3 members) all managed through one control plane
@@ -54,8 +54,7 @@ Pure Storage Fusion is the hyperconverged foundation that runs the entire demo s
 │  │ Response: {                                      │     │
 │  │   "instance_id": "aen-sql-25-a:1433",            │     │
 │  │   "protection_group": "aen-sql-25-a-pg",         │     │
-│  │   "volumes": ["aen-sql-25-a-pg.data",            │     │
-│  │              "aen-sql-25-a-pg.log"]              │     │
+│  │   "volumes": ["aen-sql-25-a-pg.data"]            │     │
 │  │ }                                                │     │
 │  └──────────────────────────────────────────────────┘     │
 │                                                           │

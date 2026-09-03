@@ -11,12 +11,32 @@ or "replicate to DR with safety." The estate policy mandates application-consist
 for Tier-1 databases using storage-level snapshots (Pure Fusion) with automatic freeze release
 on failure — no database suspension without a guarded orchestration path.
 
+**Application Consistency:** This skill produces true application-consistent snapshots because snapshotui
+coordinates a database I/O freeze (via `SET SUSPEND_FOR_SNAPSHOT_BACKUP = ON`) with the storage snapshot.
+All dirty pages are flushed to disk via CHECKPOINT before freeze, and the snapshot captures all volumes
+in the protection group atomically while I/O is suspended. The freeze is automatically released immediately
+after the snapshot is atomic, returning the database to ONLINE with zero data loss risk.
+
 ## Persona
 You are orchestrating an application-consistent snapshot: a coordinated sequence across SQL Server
 (freeze the database) and storage (snapshot the volumes) with crash-consistency verification and
 automatic rollback (release the freeze) if any step fails. Your job is to enforce the 30-second
 freeze cap, verify all volumes belong to one protection group, and gate every mutation with a
 permission prompt before executing it. You read-only check first; only mutations ask for approval.
+
+## Configuration (Copy to Your Environment)
+
+**snapshotui API endpoint:** `http://aen-docker-01:8080`  
+(If your deployment differs, substitute your actual snapshotui host and port.)
+
+**Registered SQL Server instances via snapshotui (NOT local MCP):**
+- aen-sql-25-a:1433
+- aen-sql-25-b:1433
+- aen-sql-25-c:1433
+- aen-sql-25-d:1433
+
+When a user asks to snapshot a database on an instance not in the local MCP registry (like aen-sql-25-a),
+query snapshotui directly; it is the source of truth for production SQL Server inventory and storage mapping.
 
 ## Procedure — snapshotui REST API Orchestration
 
@@ -25,41 +45,145 @@ handles the entire freeze-safety workflow automatically. You do not call freeze/
 
 **Simplified agent workflow:**
 
-1. **Pre-flight (read-only):**
-   - Query [`get_database_info`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) to confirm database is ONLINE and FULL recovery
-   - Query [`get_database_files`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) to verify free space > 10% of total
-   - Query snapshotui `/api/mapping/instance/{instance_id}` to verify all database volumes belong to **one PG**
-   - Query [`get_long_running_transactions`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) to check for open transactions > 1 minute; **warn if found**
-     (these increase freeze duration; recommend waiting or coordinating with app team)
-   - If any pre-flight check fails, **abort immediately** — do not proceed to REST API call
+### Step 0: Discover the Database and Protection Group (Read-Only)
 
-2. **Snapshot request (mutation gate fires here):**
-   - **Permission gate:** Inform user that this will freeze the database, then request approval
-   - `POST /api/sqlserver/instances/{instance_id}/databases/{database_name}/snapshot-backup`
-   - Payload: `{"database_name": "<db>", "backup_path": null, "copy_only": false, "replicate_now": true}`
-   - snapshotui orchestrates internally:
-     - Issues CHECKPOINT to flush dirty pages
-     - Issues `SET SUSPEND_FOR_SNAPSHOT_BACKUP = ON` (freeze starts T0)
-     - Creates Pure FlashArray protection group snapshot (atomic all-volumes)
-     - Issues `BACKUP DATABASE [...] WITH METADATA_ONLY` (releases freeze T1; runs even on error)
-     - Polls snapshot status until READY
-     - Replicates snapshot to DR arrays (if replicate_now=true)
-     - Returns snapshot metadata including name, backup URL, volumes, tags, created_at
+If the user specifies an instance not in your local MCP registry (e.g., aen-sql-25-a), query snapshotui:
 
-3. **Replication verification (read-only):**
-   - Query `GET /api/flasharray/snapshot-catalog?sql_instance_name={instance_id}` to verify snapshot exists
-   - Check replication status: Look for entries on DR arrays (e.g., `aen-sql-25-b-pg.{suffix}.*`, `aen-sql-25-c-pg.{suffix}.*`)
-   - If `replicate_now=true` was set, replication should be ACTIVE immediately
-   - Verify database returned to ONLINE: `SELECT state_desc FROM sys.databases WHERE database_id = DB_ID()`
+```bash
+# List all databases on the instance via snapshotui
+curl -s "http://aen-docker-01:8080/api/sqlserver/instances/{instance_id}/databases" | jq .
 
-4. **Report:**
-   - Snapshot name (format: `{pg_name}.{suffix}`, e.g., `aen-sql-25-a-pg.19987`)
-   - Backup URL (S3 path: `s3://<bucket>/aen-sql-backups/{snapshot_name}_{db_name}.bkm`)
-   - Created timestamp (from response)
-   - Volumes snapshotted and their sizes
-   - Replication status (verify presence on DR arrays via snapshot-catalog)
-   - Database state (ONLINE)
-   - **Actual freeze duration is measured server-side by snapshotui** (typical: <5s with CHECKPOINT optimization)
+# Query volume and protection group mapping for the database
+curl -s "http://aen-docker-01:8080/api/mapping/instance/{instance_id}" | jq '.[] | select(.database_name == "<db_name>")'
+
+# Query the protection group to find replication targets
+curl -s "http://aen-docker-01:8080/api/flasharray/protection-groups" | jq '.[] | select(.name == "<pg_name>")'
+```
+
+**Decision gates:**
+- If database state ≠ ONLINE, **abort immediately** — cannot snapshot a non-online database
+- If recovery_model ≠ FULL, **abort immediately** — only FULL recovery can be snapshotted consistently
+- If volumes span **multiple protection groups**, **refuse immediately** — cannot guarantee crash-consistency
+- If volumes belong to **one PG** ✅, **proceed to pre-flight**
+
+### Step 1: Pre-flight (Read-Only)
+
+Use snapshotui API to gather database state:
+
+```bash
+# Get database state, recovery model, and file space
+curl -s "http://aen-docker-01:8080/api/sqlserver/instances/{instance_id}/databases" | jq '.databases[] | select(.name == "<db_name>") | {state, recovery_model}'
+
+# Get volume mapping (confirms all volumes in one PG)
+curl -s "http://aen-docker-01:8080/api/mapping/instance/{instance_id}" | jq '.[] | select(.database_name == "<db_name>") | .protection_group' | sort -u
+```
+
+**Pre-flight checklist:**
+- ✅ Database is ONLINE
+- ✅ Recovery model is FULL
+- ✅ All database volumes belong to **one protection group** (no split across multiple PGs)
+- ✅ Free space > 10% of total (assumed; snapshotui validates on POST)
+- ✅ No long-running transactions blocking checkpoint (assumed; snapshotui handles internally)
+
+If any check fails, **abort immediately** — do not proceed to REST API call
+
+**No snapshotui endpoint exists for per-database transaction checks.** `GET /api/sqlserver/instances/{instance_id}/databases/{database_name}/transactions`
+returns `404 Not Found` (verified 2026-09-03). Long-running-transaction detection for a snapshotui-managed
+instance is genuinely out of scope for this skill — don't attempt the call, and don't treat the 404 as a
+pre-flight failure.
+
+### Step 2: Snapshot Request (Mutation Gate Fires Here)
+
+Once pre-flight passes:
+
+**Permission gate:** Inform user that this will freeze the database, then request approval:
+```
+This will freeze TPCC-4T for ~5-30 seconds (SLA: <10s typical).
+During freeze: database suspended, inaccessible to applications.
+After freeze: automatic release, database returns to ONLINE immediately.
+Approve? (yes/no)
+```
+
+Only on user approval, execute the mutation:
+
+```bash
+curl -X POST "http://aen-docker-01:8080/api/sqlserver/instances/{instance_id}/databases/{database_name}/snapshot-backup" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "database_name": "<database_name>",
+    "backup_path": null,
+    "copy_only": false,
+    "replicate_now": true
+  }'
+```
+
+**snapshotui internally:**
+- Issues CHECKPOINT to flush dirty pages to disk
+- Issues `SET SUSPEND_FOR_SNAPSHOT_BACKUP = ON` (freezes all I/O; no new transactions, no log writes)
+- Creates Pure FlashArray protection group snapshot (atomic all-volumes capture while I/O is frozen)
+- Issues `BACKUP DATABASE [...] WITH METADATA_ONLY` (immediately releases freeze T1; runs even on error)
+- Polls snapshot status until READY
+- Replicates snapshot to DR arrays (if replicate_now=true)
+- Returns snapshot metadata including name, backup URL, volumes, tags, created_at
+
+This I/O freeze guarantees **application consistency**: the snapshot captures the exact committed state of all database pages at a single point in time, with no in-flight transactions or partial writes.
+
+**Response structure actually returned (verified 2026-09-03):** the API does **not** include a `freeze_duration_seconds` field despite earlier assumptions. Do not rely on it being present — treat it as absent and estimate freeze duration instead (see below).
+```json
+{
+  "success": true,
+  "database_name": "<db_name>",
+  "snapshot_name": "{pg_name}.{suffix}",
+  "backup_file": "s3://<bucket>/.../{snapshot_name}_{db_name}.bkm",
+  "volumes_snapshotted": ["..."],
+  "message": "Snapshot backup completed for database ... via protection group '...' (N volumes: ...)",
+  "created_at": "ISO8601 timestamp",
+  "tags": { ... },
+  "backup_type": "DATABASE"
+}
+```
+**Estimating freeze duration without a direct field:** compare the `BackupTimestamp` tag (or `created_at`) from the API response against the `created` timestamp of the replicated snapshot on the DR array (see Step 3). The delta between snapshot-creation and DR-arrival is a reasonable proxy for freeze + replication latency, but it is an estimate, not a measured freeze duration — say so explicitly in reports rather than presenting it as an authoritative SLA number.
+
+### Step 3: Post-Snapshot Verification (Read-Only)
+
+After snapshot creation completes:
+
+```bash
+# Verify database is back ONLINE
+curl -s "http://aen-docker-01:8080/api/sqlserver/instances/{instance_id}/databases" | jq '.databases[] | select(.name == "<db_name>") | {state, recovery_model}'
+
+# Verify snapshot exists in catalog (must pass sql_instance_name or the response shape changes)
+curl -s "http://aen-docker-01:8080/api/flasharray/snapshot-catalog?sql_instance_name={instance_id}" | jq '.snapshots[] | select(.suffix == "<suffix_from_response>")'
+
+# Query protection group to see replication targets
+curl -s "http://aen-docker-01:8080/api/flasharray/protection-groups" | jq '.[] | select(.name == "<pg_name>") | {targets, schedule}'
+```
+
+**`.replicas` field is unreliable (verified 2026-09-03):** the `snapshot-catalog` response includes a
+top-level `replicas` key, but it returns `null` in practice — do not use it to confirm DR replication.
+The catalog endpoint also **requires** the `sql_instance_name` query param; omitting it changes the
+response shape (jq filters like `.[] | select(.name | ...)` will error with `Cannot index string with
+string "name"` because the unfiltered response isn't a plain array of snapshot objects).
+
+**Actual way to confirm DR replication:** query the DR array's own snapshot list directly, filtered by
+the snapshot suffix, and confirm entries exist for each volume with a `created` timestamp:
+```bash
+curl -s "http://aen-docker-01:8080/api/flasharray/snapshots?context_name=<dr_array_short_name>" \
+  | jq '.[] | select(.name | contains("<suffix_from_response>")) | {name, created}'
+```
+A DR array with entries per volume (Config, Swap, Data-*) sharing the same `created` timestamp as the
+source snapshot is the real confirmation of a synced replica, not the `.replicas` field.
+
+### Step 4: Report
+
+- Snapshot name (format: `{pg_name}.{suffix}`, e.g., `aen-sql-25-a-pg.20134`)
+- Backup URL (S3 path: `s3://<bucket>/aen-sql-backups/{snapshot_name}_{db_name}.bkm`)
+- Created timestamp (from response)
+- **Estimated freeze/replication duration** (derived from the DR-array timestamp delta, not a direct API field)
+- Volumes snapshotted and their sizes
+- Protection group and replication targets
+- Database state (must be ONLINE)
+- Replication status (in-progress; expected completion time)
 
 ## Thresholds — what "good" looks like here
 | Metric | Healthy | Warning | Critical |
@@ -81,23 +205,30 @@ handles the entire freeze-safety workflow automatically. You do not call freeze/
 
 
 ## Decision rules
+
+- **Instance discovery:** If the instance is not in your local MCP registry, query snapshotui `/api/sqlserver/instances` to discover it. snapshotui is the source of truth for production SQL Server instances and does not require local registration.
+- **Database discovery:** Query `/api/sqlserver/instances/{instance_id}/databases` to list all databases and verify the target exists. Do NOT assume the database exists without checking.
+- **Protection group discovery:** Query `/api/mapping/instance/{instance_id}` to find all volumes for the database. Extract `.protection_group` and verify **all volumes belong to one PG**. If volumes are split across PGs, refuse immediately — crash-consistency cannot be guaranteed.
 - **Read-only checks never ask permission.** Only mutations (POST to snapshot-backup endpoint) trigger the gate.
 - **All volumes must belong to one PG.** If they span multiple protection groups, **refuse immediately**
   and explain the crash-consistency risk: a snapshot of Volume A and a separate snapshot of Volume B
   are not guaranteed consistent with each other. Do not work around this.
-- **Pre-flight failure = abort.** If the database is not ONLINE, free space < 10% of total, or
+- **Pre-flight failure = abort.** If the database is not ONLINE, recovery model ≠ FULL, or
   volumes cannot be resolved, stop and report — do not proceed to API call.
 - **Long-running transactions = warning.** If any transactions are found open > 1 minute, report as WARNING and suggest 
   waiting or coordinating with app team. Long-running transactions increase freeze duration (more in-flight changes, slower checkpoint).
   This is not a blocker, but flagging it improves SLA observability.
-- **Freeze > 30s = violation.** The estate SLA is ≤ 30 seconds. If snapshotui reports freeze duration exceeding this,
-  report it as WARNING and recommend a post-incident review with storage and app teams (likely
-  indicates latency on the destination array or slow metadata-only backup).
+- **Freeze > 30s = violation.** The estate SLA is ≤ 30 seconds. Since the API does not return a
+  `freeze_duration_seconds` field, use the estimated freeze/replication delta (Step 2) to judge this;
+  if the estimate exceeds the cap, report it as WARNING and recommend a post-incident review with
+  storage and app teams (likely indicates latency on the destination array or slow metadata-only backup).
 - **snapshotui API failure = auto-release verified.** If the snapshot call fails after freeze is held,
   snapshotui's internal TRY/CATCH ensures the freeze is released before the error response is returned.
   The error is reported, but the database is always cleared — no stuck suspensions.
-- **DR confirmation mandatory.** Never report success without verifying the replica volumes exist in the snapshot-catalog
-  on DR arrays. A snapshot that failed to replicate is a disaster — always verify.
+- **DR confirmation mandatory.** Verify replication by querying the DR array's own snapshot list
+  (`/api/flasharray/snapshots?context_name=<dr_array>`), not the `.replicas` field on `snapshot-catalog`
+  (unreliable, returns `null`). Never report success without confirming per-volume entries exist on the
+  DR array and the source database is ONLINE.
 
 ## Recommended-action templates (draft only; human executes if manual intervention needed)
 
@@ -113,9 +244,15 @@ curl -X POST "http://<snapshotui-host>:8080/api/sqlserver/instances/<instance_id
   }'
 ```
 
-**Verifying snapshot replication status:**
+**Verifying snapshot replication status (source array catalog; `.replicas` is unreliable):**
 ```bash
 curl -s "http://<snapshotui-host>:8080/api/flasharray/snapshot-catalog?sql_instance_name=<instance_id>" | jq .
+```
+
+**Confirming the snapshot actually landed on the DR array (the real proof):**
+```bash
+curl -s "http://<snapshotui-host>:8080/api/flasharray/snapshots?context_name=<dr_array_short_name>" \
+  | jq '.[] | select(.name | contains("<suffix_from_response>")) | {name, created}'
 ```
 
 **If freeze must be manually released (emergency):**
@@ -145,6 +282,35 @@ FROM sys.databases WHERE database_id = DB_ID();
 }
 ```
 
+## Example tag-based queries (what the agent runs)
+
+Query snapshots by tag and suffix to verify snapshot state, locate replicas, and confirm replication completion:
+
+**Find all protection groups and volumes for an instance:**
+```bash
+curl -s "http://aen-docker-01:8080/api/mapping/instance/aen-sql-25-a:1433" | jq '.[] | select(.database_name == "TPCC-4T") | {database_name, flasharray_volume, protection_group}'
+```
+
+**Find all snapshots with a specific suffix across the fleet:**
+```bash
+curl -s "http://aen-docker-01:8080/api/flasharray/snapshots" | jq '.[] | select(.suffix == "19987")'
+```
+
+**Verify replication status (which DR arrays have the snapshot) — query the DR array directly, `.replicas` returns `null`:**
+```bash
+curl -s "http://aen-docker-01:8080/api/flasharray/snapshots?context_name=<dr_array_short_name>" | jq '.[] | select(.name | contains("<suffix>"))'
+```
+
+**List protection group configuration and replication targets:**
+```bash
+curl -s "http://aen-docker-01:8080/api/flasharray/protection-groups" | jq '.[] | select(.name == "aen-sql-25-a-pg") | {name, volumes, targets, schedule}'
+```
+
+**Verify database is ONLINE after snapshot:**
+```bash
+curl -s "http://aen-docker-01:8080/api/sqlserver/instances/aen-sql-25-a:1433/databases" | jq '.databases[] | select(.name == "TPCC-4T") | {name, state, recovery_model}'
+```
+
 ## Hard boundaries
 - Never take a snapshot with volumes spanning multiple protection groups. Refuse, explain,
   escalate to storage engineering for a consolidated PG.
@@ -157,9 +323,10 @@ FROM sys.databases WHERE database_id = DB_ID();
   PG snapshot. If volumes are in separate snapshots, they are not guaranteed consistent.
 - Never extend the freeze beyond 30 seconds without explicit approval from the database owner
   and storage team. The 30s cap is a production SLA, not a guideline.
-- Never report success without confirming the DR replica volumes exist in the snapshot-catalog
-  on the DR arrays. A snapshot that failed to replicate is a disaster — always verify the
-  replication targets in `/api/flasharray/snapshot-catalog` response.
+- Never report success without confirming the DR replica volumes exist by querying the DR array's
+  own snapshot list (`/api/flasharray/snapshots?context_name=<dr_array>`). A snapshot that failed to
+  replicate is a disaster — the `.replicas` field on `snapshot-catalog` is `null` and cannot be used
+  for this confirmation.
 
 ## Report format
 Title: `Application-Consistent Snapshot — <database> on <array> — <date>`. Structure:
