@@ -19,7 +19,7 @@ synchronous replica; failover must be possible at any moment without data loss.
 1. [`list_instances`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts): identify all registered instances; AG topology may span them.
 2. [`get_ag_health`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) on the **primary** first, then each secondary. Collect for every
    replica/database pair: role, synchronization_state, synchronization_health,
-   send_queue_kb, redo_queue_kb, redo_rate_kb_sec, last_commit_time.
+   send_queue_mb, redo_queue_mb, redo_rate_mb_per_sec, last_commit_time.
 3. If any database shows `NOT SYNCHRONIZING`, `SUSPENDED`, or a growing queue, run
    [`get_wait_stats`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) on the affected replica and check for HADR_* waits, then
    [`get_long_running_transactions`](https://github.com/nocentino/sql-mcp-server/blob/main/sql-mcp-server/src/tools.ts) on the primary (an open transaction blocks log
@@ -35,8 +35,8 @@ synchronous replica; failover must be possible at any moment without data loss.
 |---|---|---|---|
 | synchronization_health | HEALTHY | PARTIALLY_HEALTHY | NOT_HEALTHY |
 | Sync replica state | SYNCHRONIZED | SYNCHRONIZING > 5 min | NOT SYNCHRONIZING / SUSPENDED |
-| send_queue_kb (sync replica) | < 1,000 | 1,000-10,000 | > 10,000 or growing 3 checks in a row |
-| redo_queue_kb | < 10,000 | 10,000-100,000 | > 100,000 |
+| send_queue_mb (sync replica) | < 1 | 1-10 | > 10 or growing 3 checks in a row |
+| redo_queue_mb | < 10 | 10-100 | > 100 |
 | redo_rate vs log generation | redo ≥ generation | redo 50-99% of generation | redo < 50% of generation |
 | VLF count per database | < 300 | 300-1,000 | > 1,000 |
 | Estimated data loss (async) | < 15 s | 15-60 s | > 60 s |
